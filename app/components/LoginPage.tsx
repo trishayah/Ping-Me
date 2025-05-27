@@ -9,7 +9,12 @@ import {
 import { LogIn } from "lucide-react-native";
 import { useRouter } from "expo-router";
 
-const LoginPage = ({ onLogin, onSignup }) => {
+type LoginPageProps = {
+  onLogin: (email: string, password: string) => boolean;
+  onSignup: () => void;
+};
+
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
