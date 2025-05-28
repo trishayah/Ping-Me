@@ -8,10 +8,20 @@ import {
 } from "react-native";
 import { Check, X, Calendar, Users } from "react-native-feather";
 import { collection, query, onSnapshot } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { firebaseApp, db } from "../../firebaseConfig"; 
+
+type Transaction = {
+  id: string;
+  eventName?: string;
+  status?: string;
+  date?: string | number | Date;
+  attendees?: number;
+  registered?: number;
+  // Add other fields as needed based on your Firestore data
+};
 
 const Transactions = ({ userType = "organizer" }) => {
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   useEffect(() => {
     const q = query(collection(db, "transactions"));
@@ -26,7 +36,7 @@ const Transactions = ({ userType = "organizer" }) => {
     return () => unsubscribe();
   }, []);
 
-  const renderTransaction = ({ item }) => (
+  const renderTransaction = ({ item }: { item: Transaction }) => (
     <View style={styles.transactionCard}>
       <View style={styles.transactionHeader}>
         <Text style={styles.eventName}>{item.eventName}</Text>
@@ -53,7 +63,7 @@ const Transactions = ({ userType = "organizer" }) => {
       <View style={styles.detailsRow}>
         <Calendar width={16} height={16} style={styles.icon} />
         <Text style={styles.detailText}>
-          {new Date(item.date).toLocaleDateString()}
+          {item.date ? new Date(item.date).toLocaleDateString() : "No date"}
         </Text>
       </View>
 

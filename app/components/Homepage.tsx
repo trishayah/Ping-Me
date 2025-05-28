@@ -16,7 +16,14 @@ import {
   Settings,
 } from "react-native-feather";
 
-const Homepage = ({ userType = "student", navigation }) => {
+import type { StackNavigationProp } from '@react-navigation/stack';
+
+type HomepageProps = {
+  userType?: "student" | "organizer";
+  navigation: StackNavigationProp<any>;
+};
+
+const Homepage: React.FC<HomepageProps> = ({ userType = "student", navigation }) => {
   const renderOrganizerStats = () => (
     <View style={styles.statsContainer}>
       <View style={styles.statCard}>
@@ -70,7 +77,8 @@ const Homepage = ({ userType = "student", navigation }) => {
           </View>
         </View>
         <TouchableOpacity>
-          <Bell width={24} height={24} style={styles.headerIcon} />
+          {/* <Bell width={24} height={24} style={styles.headerIcon} /> */}
+           <Bell width={24} height={24} color={styles.headerIcon.color} />
         </TouchableOpacity>
       </View>
 
