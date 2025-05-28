@@ -9,8 +9,8 @@ import {
 import { LogIn } from "lucide-react-native";
 import { useRouter } from "expo-router";
 
-import { auth } from '../../FirebaseConfig'; 
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+// import { auth } from '../../FirebaseConfig'; 
+// import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 
 
 type LoginPageProps = {
@@ -24,25 +24,25 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const logIn = async () => {
-    try {
-      const user = await signInWithEmailAndPassword(auth, email, password);
+  // const logIn = async () => {
+  //   try {
+  //     const user = await signInWithEmailAndPassword(auth, email, password);
 
-    } catch (error: any) {
-      console.error("Login error: ", error);
-      alert("Sign in failed: " + error.message);
-    }
-  }
+  //   } catch (error: any) {
+  //     console.error("Login error: ", error);
+  //     alert("Sign in failed: " + error.message);
+  //   }
+  // }
 
-  const signUp = async () => {
-    try {
-      const user = await createUserWithEmailAndPassword(auth, email, password);
+  // const signUp = async () => {
+  //   try {
+  //     const user = await createUserWithEmailAndPassword(auth, email, password);
 
-    } catch (error: any) {
-      console.error("Login error: ", error);
-      alert("Sign in failed: " + error.message);
-    }
-  }
+  //   } catch (error: any) {
+  //     console.error("Login error: ", error);
+  //     alert("Sign in failed: " + error.message);
+  //   }
+  // }
 
   const handleSubmit = () => {
     if (!email || !password) {
