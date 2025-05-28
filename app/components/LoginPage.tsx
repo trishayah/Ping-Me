@@ -9,11 +9,16 @@ import {
 import { LogIn } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
-// import { firebaseApp } from "../firebaseConfig"; 
+import { firebaseApp, firestoreDb } from "../../FirebaseConfig"; 
 
-// const db = getFirestore(firebaseApp);
+const db = getFirestore(firebaseApp);
 
-const LoginPage = ({ onLogin, onSignup }) => {
+interface LoginPageProps {
+  onLogin: (email: string, password: string) => void;
+  onSignup: () => void;
+}
+
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
