@@ -8,50 +8,46 @@ import {
 } from "react-native";
 import { LogIn } from "lucide-react-native";
 import { useRouter } from "expo-router";
+import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
+// import { firebaseApp } from "../firebaseConfig"; 
 
-// import { auth } from '../../FirebaseConfig'; 
-// import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+// const db = getFirestore(firebaseApp);
 
-
-type LoginPageProps = {
-  onLogin: (email: string, password: string) => boolean;
-  onSignup: () => void;
-};
-
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
+const LoginPage = ({ onLogin, onSignup }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const router = useRouter();
 
-  // const logIn = async () => {
-  //   try {
-  //     const user = await signInWithEmailAndPassword(auth, email, password);
-
-  //   } catch (error: any) {
-  //     console.error("Login error: ", error);
-  //     alert("Sign in failed: " + error.message);
-  //   }
-  // }
-
-  // const signUp = async () => {
-  //   try {
-  //     const user = await createUserWithEmailAndPassword(auth, email, password);
-
-  //   } catch (error: any) {
-  //     console.error("Login error: ", error);
-  //     alert("Sign in failed: " + error.message);
-  //   }
-  // }
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!email || !password) {
       setError("Please enter both email and password");
       return;
     }
-    const success = onLogin(email, password);
-    if (!success) {
-      setError("Invalid email or password");
+
+    try {
+      const accountsRef = collection(db, "accounts");
+      const q = query(accountsRef, where("email", "==", email));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        setError("Account not found");
+        return;
+      }
+
+      const userDoc = querySnapshot.docs[0];
+      const userData = userDoc.data();
+
+      if (userData.password !== password) {
+        setError("Invalid email or password");
+        return;
+      }
+
+      setError("");
+      onLogin(email, password); // or router.replace("/home")
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Something went wrong. Please try again.");
     }
   };
 
@@ -110,6 +106,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
