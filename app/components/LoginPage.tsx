@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     width: "100%",
-    backgroundColor: "#2563eb",
+    backgroundColor: "#6200ee",
     padding: 14,
     borderRadius: 12,
     flexDirection: "row",
@@ -165,11 +165,11 @@ const styles = StyleSheet.create({
 
   signupText: {
     fontSize: 14,
-    color: "#6b7280", // gray-500
+    color: "#6b7280",
   },
 
   signupLink: {
-    color: "#2563eb",
+    color: "#9570dd",
     fontWeight: "600",
     textDecorationLine: "underline",
   },
