@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -21,13 +21,45 @@ import {
   Edit,
   Plus,
 } from "react-native-feather";
+import { getFirestore, collection, getDocs } from "firebase/firestore";
+import { firebaseApp } from "../../firebaseConfig";
+
+const db = getFirestore(firebaseApp);
 
 const Events = ({ userType = "student", initialEvents = [], navigation }) => {
-  const [events] = useState(initialEvents);
+  const [events, setEvents] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [rsvpedEvents, setRsvpedEvents] = useState([]);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "events"));
+        const fetchedEvents = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedEvents.push({
+            id: doc.id,
+            eventName: data.name,
+            eventDescription: data.description,
+            eventType: data.category,
+            eventLocation: data.location,
+            eventDate: data.date,
+            eventTime: data.time,
+            eventAttendees: data.attendees ? [data.attendees] : [],
+            eventImage: data.image ? { uri: data.image } : null,
+            // add other fields as needed
+          });
+        });
+        setEvents(fetchedEvents);
+      } catch (error) {
+        console.error("Error fetching events:", error);
+      }
+    };
+    fetchEvents();
+  }, []);
 
   const filteredEvents = events.filter((event) => {
     const matchesSearch =
@@ -41,7 +73,8 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
       return event.eventType === "workshop" && matchesSearch;
     if (filter === "seminars")
       return (
-        (event.eventType === "seminar" || event.eventType === "webinar") && matchesSearch
+        (event.eventType === "seminar" || event.eventType === "webinar") &&
+        matchesSearch
       );
     if (filter === "conferences")
       return event.eventType === "conference" && matchesSearch;
@@ -76,21 +109,20 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
   };
 
   const getEventTypeBadgeStyle = (type) => {
-  switch (type.toLowerCase()) {
-    case "hackathon":
-      return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
-    case "workshop":
-      return { backgroundColor: "#dcfce7", color: "#166534" };
-    case "seminar":
-    case "webinar":
-      return { backgroundColor: "#dbeafe", color: "#1e40af" };
-    case "conference":
-      return { backgroundColor: "#fef9c3", color: "#854d0e" };
-    default:
-      return { backgroundColor: "#e2e8f0", color: "#334155" };
-  }
-};
-
+    switch (type.toLowerCase()) {
+      case "hackathon":
+        return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
+      case "workshop":
+        return { backgroundColor: "#dcfce7", color: "#166534" };
+      case "seminar":
+      case "webinar":
+        return { backgroundColor: "#dbeafe", color: "#1e40af" };
+      case "conference":
+        return { backgroundColor: "#fef9c3", color: "#854d0e" };
+      default:
+        return { backgroundColor: "#e2e8f0", color: "#334155" };
+    }
+  };
 
   if (selectedEvent) {
     return (
@@ -236,9 +268,9 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
       )}
 
       {userType !== "student" && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.fab}
-          onPress={() => navigation.navigate('AddEvent')}
+          onPress={() => navigation.navigate("AddEvent")}
         >
           <Plus width={24} height={24} style={styles.fabIcon} />
         </TouchableOpacity>
@@ -259,16 +291,21 @@ const EventCard = ({
   return (
     <TouchableOpacity style={styles.cardContainer} onPress={onPress}>
       {event.eventImage && (
-        <Image 
-          source={event.eventImage} 
-          style={styles.cardImage} 
+        <Image
+          source={event.eventImage}
+          style={styles.cardImage}
           resizeMode="cover"
         />
       )}
 
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
-          <View style={[styles.eventTypeBadge, { backgroundColor: badgeStyle.backgroundColor }]}>
+          <View
+            style={[
+              styles.eventTypeBadge,
+              { backgroundColor: badgeStyle.backgroundColor },
+            ]}
+          >
             <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
               {event.eventType}
             </Text>
@@ -284,7 +321,9 @@ const EventCard = ({
 
         <View style={styles.cardDetailRow}>
           <Calendar width={14} height={14} style={styles.detailIcon} />
-          <Text style={styles.cardDetailText}>{formatDate(event.eventDate)}</Text>
+          <Text style={styles.cardDetailText}>
+            {formatDate(event.eventDate)}
+          </Text>
           <Clock
             width={14}
             height={14}
@@ -317,19 +356,19 @@ const EventDetails = ({
   event,
   onBack,
   onRSVP,
-  isAttending,  
+  isAttending,
   userType,
   formatDate,
 }) => {
   const badgeStyle = getEventTypeBadgeStyle(event.eventType);
-  
+
   return (
     <ScrollView style={styles.detailsContainer}>
       <View style={styles.detailsHeader}>
         {event.eventImage && (
-          <Image 
-            source={event.eventImage} 
-            style={styles.detailsImage} 
+          <Image
+            source={event.eventImage}
+            style={styles.detailsImage}
             resizeMode="cover"
           />
         )}
@@ -337,7 +376,13 @@ const EventDetails = ({
           <ArrowLeft width={20} height={20} style={styles.backIcon} />
         </TouchableOpacity>
         <View style={styles.detailsHeaderContent}>
-          <View style={[styles.eventTypeBadge, styles.detailsBadge, { backgroundColor: badgeStyle.backgroundColor }]}>
+          <View
+            style={[
+              styles.eventTypeBadge,
+              styles.detailsBadge,
+              { backgroundColor: badgeStyle.backgroundColor },
+            ]}
+          >
             <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
               {event.eventType}
             </Text>
@@ -388,7 +433,9 @@ const EventDetails = ({
               style={[styles.actionIcon, styles.blueIcon]}
             />
             <View>
-              <Text style={styles.detailPrimary}>{formatDate(event.eventDate)}</Text>
+              <Text style={styles.detailPrimary}>
+                {formatDate(event.eventDate)}
+              </Text>
               <Text style={styles.detailSecondary}>{event.eventTime}</Text>
             </View>
           </View>
@@ -755,23 +802,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fab: {
-    position: 'absolute',
+    position: "absolute",
     right: 16,
     bottom: 16,
-    backgroundColor: '#2563eb',
+    backgroundColor: "#2563eb",
     width: 56,
     height: 56,
     borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
   },
   fabIcon: {
-    color: 'white',
+    color: "white",
   },
 });
 

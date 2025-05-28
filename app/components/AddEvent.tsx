@@ -4,13 +4,22 @@ import { useState } from "react";
 import * as ImagePicker from "expo-image-picker";
 import TimePicker from "@/components/time-picker";
 import DatePicker from "@/components/date-picker";
+// Add Firestore imports
+import { getFirestore, collection, addDoc } from "firebase/firestore";
+import { firebaseApp } from "../../firebaseConfig";
 
+const db = getFirestore(firebaseApp);
 
 export default function AddEvent() {
     const [image, setImage] = useState<string | null>(null);
     const [eventTime, setEventTime] = useState<Date | undefined>(undefined);
     const [eventDate, setEventDate] = useState<Date | undefined>(undefined);
-    
+    const [eventName, setEventName] = useState("");
+    const [eventDescription, setEventDescription] = useState("");
+    const [eventCategory, setEventCategory] = useState("");
+    const [eventLocation, setEventLocation] = useState("");
+    const [attendees, setAttendees] = useState("");
+
     const pickImage = async () => {
         // request for camera roll permission
         const camrollPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -71,13 +80,54 @@ export default function AddEvent() {
         setEventDate(newDate);
     }
 
+    const handleSaveEvent = async () => {
+    if (!eventName || !eventDescription || !eventCategory || !eventLocation || !eventDate || !eventTime || !attendees) {
+        Alert.alert("Missing Fields", "Please fill in all fields.");
+        return;
+    }
+    try {
+        await addDoc(collection(db, "events"), {
+            name: eventName,
+            description: eventDescription,
+            category: eventCategory,
+            location: eventLocation,
+            date: eventDate.toISOString(),
+            time: eventTime.toISOString(),
+            attendees: Number(attendees),
+            image: image || null,
+            createdAt: new Date().toISOString(),
+        });
+
+        Alert.alert("Success", "Event Saved!");
+
+        setEventName("");
+        setEventDescription("");
+        setEventCategory("");
+        setEventLocation("");
+        setEventDate(undefined);
+        setEventTime(undefined);
+        setAttendees("");
+        setImage(null);
+        
+    } catch (error) {
+        Alert.alert("Error", "Failed to save event.");
+        console.error("Firestore error:", error);
+    }
+};
+
     return (
+        
         <ScrollView contentContainerStyle={styles.container}>
             <Text style={styles.title}>Add New Event</Text>
 
             {/* event name */}
             <Text style={styles.label}>Event Name</Text>
-            <TextInput style={styles.input} placeholder="Event Name" />
+            <TextInput
+                style={styles.input}
+                placeholder="Event Name"
+                value={eventName}
+                onChangeText={setEventName}
+            />
 
             {/* event description */}
             <Text style={styles.label}>Description</Text>
@@ -86,6 +136,8 @@ export default function AddEvent() {
                 placeholder="Write your event description"
                 multiline
                 numberOfLines={4}
+                value={eventDescription}
+                onChangeText={setEventDescription}
             />
 
             {/* event image */}
@@ -109,7 +161,12 @@ export default function AddEvent() {
             {/* event category */}
             <Text style={styles.label}>Event Category</Text>
             <View style={styles.pickercontainer}>
-                <Picker style={styles.picker} mode="dropdown">
+                <Picker
+                    style={styles.picker}
+                    mode="dropdown"
+                    selectedValue={eventCategory}
+                    onValueChange={setEventCategory}
+                >
                     <Picker.Item label="Select" value="" />
                     <Picker.Item label="Conference" value="conference" />
                     <Picker.Item label="Workshop" value="workshop" />
@@ -139,7 +196,12 @@ export default function AddEvent() {
 
             {/* event location */}
             <Text style={styles.label}>Location</Text>
-            <TextInput style={styles.input} placeholder="Event Location" />
+            <TextInput
+                style={styles.input}
+                placeholder="Event Location"
+                value={eventLocation}
+                onChangeText={setEventLocation}
+            />
 
             {/* event number of attendees */}
             <Text style={styles.label}>Attendees</Text>
@@ -147,10 +209,12 @@ export default function AddEvent() {
                 style={styles.input}
                 placeholder="Number of Attendees"
                 keyboardType="numeric"
+                value={attendees}
+                onChangeText={setAttendees}
             />
 
             {/* save button */}
-            <TouchableOpacity style={styles.button} onPress={() => alert("Event Saved!")}>
+            <TouchableOpacity style={styles.button} onPress={handleSaveEvent}>
                 <Text style={styles.buttonTxt}>Save</Text>
             </TouchableOpacity>
         </ScrollView>
@@ -199,7 +263,7 @@ const styles = StyleSheet.create({
     },
     button: {
         width: "100%",
-        backgroundColor: "#2563eb",
+        backgroundColor: "#6200ee",
         padding: 12,
         borderRadius: 12,
         flexDirection: "row",

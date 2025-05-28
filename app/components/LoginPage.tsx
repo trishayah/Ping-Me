@@ -8,13 +8,19 @@ import {
 } from "react-native";
 import { LogIn } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
-import { firebaseApp, firestoreDb } from "../../firebaseConfig"; 
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
+import { firebaseApp, firestoreDb } from "../../firebaseConfig";
 
 const db = getFirestore(firebaseApp);
 
 interface LoginPageProps {
-  onLogin: (email: string, password: string) => void;
+  onLogin: (email: string, password: string, userType: string) => void;
   onSignup: () => void;
 }
 
@@ -49,7 +55,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
       }
 
       setError("");
-      onLogin(email, password); // or router.replace("/home")
+      // Pass userType to onLogin or navigation
+      onLogin(email, password, userData.userType); // <-- add userType
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");
@@ -111,7 +118,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
     </View>
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {

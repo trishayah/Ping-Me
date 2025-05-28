@@ -32,7 +32,9 @@ const SignUpPage = ({ onBack }) => {
   };
 
   return (
-
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+    >
       <ScrollView 
         contentContainerStyle={styles.scrollContainer}
       >
@@ -168,6 +170,7 @@ const SignUpPage = ({ onBack }) => {
           </View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
   );
 };
 

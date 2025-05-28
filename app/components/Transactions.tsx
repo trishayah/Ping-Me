@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { Check, X, Calendar, Users } from "react-native-feather";
 import { collection, query, onSnapshot } from "firebase/firestore";
-import { db } from "../config/firebase";
 
 const Transactions = ({ userType = "organizer" }) => {
   const [transactions, setTransactions] = useState([]);

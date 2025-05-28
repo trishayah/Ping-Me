@@ -16,7 +16,12 @@ import {
   Settings,
 } from "react-native-feather";
 
-const Homepage = ({ userType = "student", navigation }) => {
+const Homepage = ({
+  userType = "student",
+  userEmail,
+  onLogout,
+  navigation,
+}) => {
   const renderOrganizerStats = () => (
     <View style={styles.statsContainer}>
       <View style={styles.statCard}>
@@ -66,10 +71,10 @@ const Homepage = ({ userType = "student", navigation }) => {
           />
           <View>
             <Text style={styles.welcome}>Welcome back,</Text>
-            <Text style={styles.userName}>John Doe</Text>
+            <Text style={styles.userName}>{userEmail || "User"}</Text>
           </View>
         </View>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={onLogout}>
           <Bell width={24} height={24} style={styles.headerIcon} />
         </TouchableOpacity>
       </View>

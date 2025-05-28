@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { Users, Calendar, TrendingUp, BarChart2 } from "react-native-feather";
 import { collection, query, getDocs } from "firebase/firestore";
-import { db } from "../config/firebase";
 
 const Reports = ({ userType = "organizer" }) => {
   const [metrics, setMetrics] = useState({
