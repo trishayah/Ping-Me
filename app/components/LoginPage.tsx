@@ -9,7 +9,7 @@ import {
 import { LogIn } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
-import { firebaseApp, firestoreDb } from "../../FirebaseConfig"; 
+import { firebaseApp, firestoreDb } from "../../firebaseConfig"; 
 
 const db = getFirestore(firebaseApp);
 
