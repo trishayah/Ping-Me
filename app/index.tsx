@@ -1,6 +1,6 @@
 import { Text, View, StyleSheet} from "react-native";
 // import Home from "./(tabs)/Home";
-import AddEvent from "./components/AddEvent";
+import AddEvent from "./(tabs)/AddEvent";
 
 
 export default function Index() {

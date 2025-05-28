@@ -9,6 +9,10 @@ import {
 import { LogIn } from "lucide-react-native";
 import { useRouter } from "expo-router";
 
+// import { auth } from '../../FirebaseConfig'; 
+// import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+
+
 type LoginPageProps = {
   onLogin: (email: string, password: string) => boolean;
   onSignup: () => void;
@@ -19,6 +23,26 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const router = useRouter();
+
+  // const logIn = async () => {
+  //   try {
+  //     const user = await signInWithEmailAndPassword(auth, email, password);
+
+  //   } catch (error: any) {
+  //     console.error("Login error: ", error);
+  //     alert("Sign in failed: " + error.message);
+  //   }
+  // }
+
+  // const signUp = async () => {
+  //   try {
+  //     const user = await createUserWithEmailAndPassword(auth, email, password);
+
+  //   } catch (error: any) {
+  //     console.error("Login error: ", error);
+  //     alert("Sign in failed: " + error.message);
+  //   }
+  // }
 
   const handleSubmit = () => {
     if (!email || !password) {
