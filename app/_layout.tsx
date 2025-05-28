@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import SplashScreen from './components/SplashScreen';
 import LoginPage from './components/LoginPage';
 import SignUpPage from './components/SignUpPage';
+import EventsPage from './components/Events';
 
 export default function RootLayout() {
   const [appState, setAppState] = useState<'loading' | 'login' | 'signup' | 'authenticated'>('loading');

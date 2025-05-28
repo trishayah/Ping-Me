@@ -27,7 +27,7 @@ const SplashScreen = () => {
         opacity: fadeAnim,
         transform: [{ scale: scaleAnim }]
       }]}>
-        <Text style={styles.appName}>Ping Me</Text>
+        <Text style={styles.appName}>PingMe</Text>
         <Text style={styles.tagline}>Connect instantly</Text>
       </Animated.View>
     </View>
