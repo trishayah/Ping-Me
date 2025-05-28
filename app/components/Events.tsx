@@ -18,12 +18,11 @@ import {
   Users,
   Clock,
   ArrowLeft,
-  Check,
-  X,
   Edit,
+  Plus,
 } from "react-native-feather";
 
-const Events = ({ userType = "student", initialEvents = [] }) => {
+const Events = ({ userType = "student", initialEvents = [], navigation }) => {
   const [events] = useState(initialEvents);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
@@ -76,21 +75,22 @@ const Events = ({ userType = "student", initialEvents = [] }) => {
     });
   };
 
-  const getEventTypeBadgeColor = (type) => {
-    switch (type.toLowerCase()) {
-      case "hackathon":
-        return styles.hackathonBadge;
-      case "workshop":
-        return styles.workshopBadge;
-      case "seminar":
-      case "webinar":
-        return styles.seminarBadge;
-      case "conference":
-        return styles.conferenceBadge;
-      default:
-        return styles.defaultBadge;
-    }
-  };
+  const getEventTypeBadgeStyle = (type) => {
+  switch (type.toLowerCase()) {
+    case "hackathon":
+      return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
+    case "workshop":
+      return { backgroundColor: "#dcfce7", color: "#166534" };
+    case "seminar":
+    case "webinar":
+      return { backgroundColor: "#dbeafe", color: "#1e40af" };
+    case "conference":
+      return { backgroundColor: "#fef9c3", color: "#854d0e" };
+    default:
+      return { backgroundColor: "#e2e8f0", color: "#334155" };
+  }
+};
+
 
   if (selectedEvent) {
     return (
@@ -221,7 +221,7 @@ const Events = ({ userType = "student", initialEvents = [] }) => {
               onPress={() => setSelectedEvent(item)}
               isAttending={rsvpedEvents.includes(item.id)}
               formatDate={formatDate}
-              getEventTypeBadgeColor={getEventTypeBadgeColor}
+              getEventTypeBadgeStyle={getEventTypeBadgeStyle}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -234,6 +234,15 @@ const Events = ({ userType = "student", initialEvents = [] }) => {
           </Text>
         </View>
       )}
+
+      {userType !== "student" && (
+        <TouchableOpacity 
+          style={styles.fab}
+          onPress={() => navigation.navigate('AddEvent')}
+        >
+          <Plus width={24} height={24} style={styles.fabIcon} />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
@@ -243,20 +252,26 @@ const EventCard = ({
   onPress,
   isAttending,
   formatDate,
-  getEventTypeBadgeColor,
+  getEventTypeBadgeStyle,
 }) => {
+  const badgeStyle = getEventTypeBadgeStyle(event.eventType);
+
   return (
     <TouchableOpacity style={styles.cardContainer} onPress={onPress}>
       {event.eventImage && (
-        <Image style={styles.cardImage} />
+        <Image 
+          source={event.eventImage} 
+          style={styles.cardImage} 
+          resizeMode="cover"
+        />
       )}
 
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
-          <View
-            style={[styles.eventTypeBadge, getEventTypeBadgeColor(event.eventType)]}
-          >
-            <Text style={styles.eventTypeText}>{event.eventType}</Text>
+          <View style={[styles.eventTypeBadge, { backgroundColor: badgeStyle.backgroundColor }]}>
+            <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
+              {event.eventType}
+            </Text>
           </View>
           {isAttending && (
             <View style={styles.attendingBadge}>
@@ -302,20 +317,30 @@ const EventDetails = ({
   event,
   onBack,
   onRSVP,
-  isAttending,
+  isAttending,  
   userType,
   formatDate,
 }) => {
+  const badgeStyle = getEventTypeBadgeStyle(event.eventType);
+  
   return (
     <ScrollView style={styles.detailsContainer}>
       <View style={styles.detailsHeader}>
-        <Image style={styles.detailsImage}/>
+        {event.eventImage && (
+          <Image 
+            source={event.eventImage} 
+            style={styles.detailsImage} 
+            resizeMode="cover"
+          />
+        )}
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <ArrowLeft width={20} height={20} style={styles.backIcon} />
         </TouchableOpacity>
         <View style={styles.detailsHeaderContent}>
-          <View style={[styles.eventTypeBadge, styles.detailsBadge]}>
-            <Text style={styles.eventTypeText}>{event.eventType}</Text>
+          <View style={[styles.eventTypeBadge, styles.detailsBadge, { backgroundColor: badgeStyle.backgroundColor }]}>
+            <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
+              {event.eventType}
+            </Text>
           </View>
           <Text style={styles.detailsTitle}>{event.eventName}</Text>
         </View>
@@ -396,23 +421,6 @@ const EventDetails = ({
                 <View key={index} style={styles.agendaItem}>
                   <Text style={styles.agendaTime}>{item.time}:</Text>
                   <Text style={styles.agendaActivity}>{item.activity}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {event.eventSpeakers && event.eventSpeakers.length > 0 && (
-          <View style={styles.detailsSection}>
-            <Text style={styles.sectionTitle}>Speakers</Text>
-            <View style={styles.speakersContainer}>
-              {event.eventSpeakers.map((speaker, index) => (
-                <View key={index} style={styles.speakerItem}>
-                  <Image style={styles.speakerImage}/>
-                  <View style={styles.speakerInfo}>
-                    <Text style={styles.speakerName}>{speaker.name}</Text>
-                    <Text style={styles.speakerRole}>{speaker.role}</Text>
-                  </View>
                 </View>
               ))}
             </View>
@@ -746,34 +754,24 @@ const styles = StyleSheet.create({
     color: "#334155",
     flex: 1,
   },
-  speakersContainer: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 8,
-    padding: 12,
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    backgroundColor: '#2563eb',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
-  speakerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  speakerImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-    backgroundColor: "#e2e8f0",
-  },
-  speakerInfo: {
-    flex: 1,
-  },
-  speakerName: {
-    fontWeight: "500",
-    color: "#1e293b",
-    marginBottom: 2,
-  },
-  speakerRole: {
-    fontSize: 13,
-    color: "#64748b",
+  fabIcon: {
+    color: 'white',
   },
 });
 
