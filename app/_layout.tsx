@@ -28,7 +28,13 @@ const EventsStack = createNativeStackNavigator();
 //   </View>
 // );
 
-function EventsStackScreen({ userType }: { userType: "student" | "organizer" }) {
+function EventsStackScreen({
+  userType,
+  userData,
+}: {
+  userType: "student" | "organizer";
+  userData: { email: string; firstName: string };
+}) {
   return (
     <EventsStack.Navigator
       screenOptions={{
@@ -39,7 +45,9 @@ function EventsStackScreen({ userType }: { userType: "student" | "organizer" }) 
         name="EventsMain"
         options={{ headerShown: false, title: "" }} // Hide header and title
       >
-        {(props) => <EventsPage {...props} userType={userType} />}
+        {(props) => (
+          <EventsPage {...props} userType={userType} userData={userData} />
+        )}
       </EventsStack.Screen>
       <EventsStack.Screen
         name="AddEvent"
@@ -84,7 +92,9 @@ function AuthenticatedTabs({
       />
       <Tab.Screen
         name="Events"
-        children={() => <EventsStackScreen userType={userData.userType} />}
+        children={() => (
+          <EventsStackScreen userType={userData.userType} userData={userData} />
+        )}
         options={{
           headerTitle: () => <HeaderTitle text="Events" />,
           tabBarIcon: ({ color }) => (
@@ -127,9 +137,14 @@ function AuthenticatedTabs({
         children={(props) => (
           <Profile
             onLogout={onLogout}
-            onLogin={
-              (email, password, userType, firstName, lastName, createdAt) => {}
-            }
+            onLogin={(
+              email,
+              password,
+              userType,
+              firstName,
+              lastName,
+              createdAt
+            ) => {}}
           />
         )}
         initialParams={{ name: "Profile" }}

@@ -54,10 +54,12 @@ const Events = ({
   userType = "student",
   initialEvents = [],
   navigation,
+  userData, // <-- make sure this is passed from the parent
 }: {
   userType?: string;
   initialEvents?: any[];
   navigation: NavigationProp<any>;
+  userData?: { email: string; firstName: string };
 }) => {
   // Debug log for userType
   console.log("Events component userType:", userType);
@@ -103,18 +105,8 @@ const Events = ({
   }
 
   // Get user info from navigation params, props, or context
-  const userEmail =
-    navigation?.getParam?.("userEmail") ||
-    navigation?.userEmail ||
-    navigation?.props?.userData?.email ||
-    navigation?.getState?.()?.routes?.[0]?.params?.userData?.email ||
-    "";
-  const userName =
-    navigation?.getParam?.("userName") ||
-    navigation?.userName ||
-    navigation?.props?.userData?.firstName ||
-    navigation?.getState?.()?.routes?.[0]?.params?.userData?.firstName ||
-    "";
+  const userEmail = userData?.email || "";
+  const userName = userData?.firstName || "";
 
   const handleRSVP: HandleRSVP = async (eventId) => {
     if (rsvpedEvents.includes(eventId)) {
@@ -135,8 +127,8 @@ const Events = ({
         await addDoc(collection(db, "registrations"), {
           eventId: event.id,
           eventName: event.eventName,
-          attendeeEmail: userEmail,
-          attendeeName: userName,
+          attendeeEmail: userEmail, // <-- store the student's email
+          attendeeName: userName, // <-- store the student's name
           registrationDate: new Date().toISOString(),
           status: "confirmed",
         });
