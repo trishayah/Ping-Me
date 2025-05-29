@@ -18,19 +18,12 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 
 const Tab = createBottomTabNavigator();
 
-// Temporary debugging component to isolate the issue
-// const DebugComponent = ({ route }: { route: any }) => (
-//   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-//     <Text>{route.params?.name ?? "Unknown"} - Debug Mode</Text>
-//   </View>
-// );
-
 function AuthenticatedTabs({
   userData,
   onLogout,
 }: {
   userData: {
-    userType: string;
+    userType: "student" | "organizer";
     email: string;
     firstName: string;
     userName: string;
@@ -69,7 +62,7 @@ function AuthenticatedTabs({
       />
       <Tab.Screen
         name="Transactions"
-        children={(props) => <Transactions {...props} userData={userData} />}
+        children={(props) => <Transactions />}
         initialParams={{ name: "Transactions" }}
         options={{
           headerTitle: () => <HeaderTitle text="Transaction" />,
@@ -84,7 +77,7 @@ function AuthenticatedTabs({
       />
       <Tab.Screen
         name="Reports"
-        children={(props) => <Reports {...props} userData={userData} />}
+        children={(props) => <Reports />}
         initialParams={{ name: "Reports" }}
         options={{
           headerTitle: () => <HeaderTitle text="Reports" />,
@@ -96,7 +89,12 @@ function AuthenticatedTabs({
       <Tab.Screen
         name="Profile"
         children={(props) => (
-          <Profile {...props} userData={userData} onLogout={onLogout} />
+          <Profile
+            onLogout={onLogout}
+            onLogin={
+              (email, password, userType, firstName, lastName, createdAt) => {}
+            }
+          />
         )}
         initialParams={{ name: "Profile" }}
         options={{

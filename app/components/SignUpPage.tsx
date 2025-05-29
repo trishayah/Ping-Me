@@ -28,7 +28,7 @@ const db = getFirestore(firebaseApp);
 
 interface SignUpPageProps {
   onBack: () => void;
-  onSignupSuccess: (email: string, userType: "student" | "organizer") => void;
+  onSignupSuccess: (email: string, userType: "student" | "organizer", firstName: string) => void;
 }
 
 const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {

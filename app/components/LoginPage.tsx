@@ -20,7 +20,7 @@ import { firebaseApp } from "../../firebaseConfig";
 const db = getFirestore(firebaseApp);
 
 interface LoginPageProps {
-  onLogin: (email: string, password: string, userType: string) => void;
+  onLogin: (email: string, password: string, userType: "student" | "organizer", firstName: string) => void;
   onSignup: () => void;
 }
 
@@ -55,7 +55,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
       }
 
       setError("");
-onLogin(email, password, userData.userType, userData.firstName);
+      onLogin(email, password, userData.userType, userData.firstName);
 
     } catch (err) {
       console.error("Login error:", err);

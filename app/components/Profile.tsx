@@ -7,8 +7,8 @@ import {
   User, Mail, Calendar, Edit3, Save, X, 
   Shield, GraduationCap, Users 
 } from 'lucide-react-native';
-import { firebaseApp } from '../../firebaseConfig';
-import { getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 interface UserProfile {
   id: string;
@@ -17,17 +17,17 @@ interface UserProfile {
   email: string;
   userType: 'student' | 'organizer';
   displayName: string;
-  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   profilePicture?: string | null;
-  lastLogin?: string | null;
-  bio?: string;
-  phone?: string;
-  location?: string;
 }
 
-export default function Profile() {
+interface ProfileProps {
+  onLogin: (email: string, password: string, userType: string, firstName: string, lastName: string, createdAt: Date) => void;
+  onLogout: () => void;
+}
+
+export default function Profile({ onLogout }: ProfileProps) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -36,16 +36,9 @@ export default function Profile() {
   // Editable fields
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
-  const [editBio, setEditBio] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editLocation, setEditLocation] = useState('');
 
-  const db = getFirestore(firebaseApp);
 
-  // In a real app, you'd get this from authentication context or AsyncStorage
   const getCurrentUserId = async () => {
-    // For demo purposes, let's get the first user from accounts
-    // In your app, replace this with actual user session management
     try {
       const q = query(collection(db, 'accounts'));
       const querySnapshot = await getDocs(q);
@@ -78,9 +71,6 @@ export default function Profile() {
         // Set editable fields
         setEditFirstName(userData.firstName);
         setEditLastName(userData.lastName);
-        setEditBio(userData.bio || '');
-        setEditPhone(userData.phone || '');
-        setEditLocation(userData.location || '');
       } else {
         Alert.alert('Error', 'Profile not found.');
       }
@@ -102,9 +92,6 @@ export default function Profile() {
         firstName: editFirstName.trim(),
         lastName: editLastName.trim(),
         displayName: `${editFirstName.trim()} ${editLastName.trim()}`,
-        bio: editBio.trim(),
-        phone: editPhone.trim(),
-        location: editLocation.trim(),
         updatedAt: new Date().toISOString(),
       };
 
@@ -127,9 +114,6 @@ export default function Profile() {
     // Reset to original values
     setEditFirstName(user?.firstName || '');
     setEditLastName(user?.lastName || '');
-    setEditBio(user?.bio || '');
-    setEditPhone(user?.phone || '');
-    setEditLocation(user?.location || '');
     setEditing(false);
   };
 
@@ -251,58 +235,6 @@ export default function Profile() {
           <Mail size={20} color="#666" />
           <Text style={styles.infoText}>{user.email}</Text>
         </View>
-
-        <View style={styles.infoItem}>
-          <User size={20} color="#666" />
-          {editing ? (
-            <TextInput
-              style={styles.editInput}
-              value={editPhone}
-              onChangeText={setEditPhone}
-              placeholder="Phone number"
-              placeholderTextColor="#9ca3af"
-              keyboardType="phone-pad"
-            />
-          ) : (
-            <Text style={styles.infoText}>{user.phone || 'No phone number'}</Text>
-          )}
-        </View>
-
-        <View style={styles.infoItem}>
-          <Users size={20} color="#666" />
-          {editing ? (
-            <TextInput
-              style={styles.editInput}
-              value={editLocation}
-              onChangeText={setEditLocation}
-              placeholder="Location"
-              placeholderTextColor="#9ca3af"
-            />
-          ) : (
-            <Text style={styles.infoText}>{user.location || 'No location set'}</Text>
-          )}
-        </View>
-      </View>
-
-      {/* Bio Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
-        {editing ? (
-          <TextInput
-            style={styles.bioInput}
-            value={editBio}
-            onChangeText={setEditBio}
-            placeholder="Tell us about yourself..."
-            placeholderTextColor="#9ca3af"
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        ) : (
-          <Text style={styles.bioText}>
-            {user.bio || 'No bio available. Edit your profile to add a bio.'}
-          </Text>
-        )}
       </View>
 
       {/* Account Details */}
@@ -314,14 +246,6 @@ export default function Profile() {
           <View>
             <Text style={styles.infoLabel}>Member since</Text>
             <Text style={styles.infoText}>{formatDate(user.createdAt)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.infoItem}>
-          <View style={[styles.statusIndicator, { backgroundColor: user.isActive ? '#10b981' : '#ef4444' }]} />
-          <View>
-            <Text style={styles.infoLabel}>Account Status</Text>
-            <Text style={styles.infoText}>{user.isActive ? 'Active' : 'Inactive'}</Text>
           </View>
         </View>
       </View>

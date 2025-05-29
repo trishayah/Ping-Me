@@ -198,7 +198,6 @@ const Events = ({
         isAttending={rsvpedEvents.includes(selectedEvent.id)}
         userType={userType}
         formatDate={formatDetailedDate}
-        getEventTypeBadgeStyle={getEventTypeBadgeStyle}
       />
     );
   }
@@ -444,7 +443,16 @@ const EventCard: React.FC<EventCardProps> = ({
   );
 };
 
-const EventDetails = ({
+type EventDetailsProps = {
+  event: EventData;
+  onBack: () => void;
+  onRSVP: (eventId: string) => void;
+  isAttending: boolean;
+  userType: string;
+  formatDate: (dateString: string) => string;
+};
+
+const EventDetails: React.FC<EventDetailsProps> = ({
   event,
   onBack,
   onRSVP,
@@ -588,7 +596,7 @@ const EventDetails = ({
           <View style={styles.detailsSection}>
             <Text style={styles.sectionTitle}>Agenda</Text>
             <View style={styles.agendaContainer}>
-              {event.eventAgenda.map((item, index) => (
+              {event.eventAgenda.map((item : any, index : any) => (
                 <View key={index} style={styles.agendaItem}>
                   <Text style={styles.agendaTime}>{item.time || "TBD"}:</Text>
                   <Text style={styles.agendaActivity}>
