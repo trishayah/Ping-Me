@@ -56,7 +56,16 @@ interface ProfileProps {
   onLogout: () => void;
 }
 
-export default function Profile({ onLogout }: ProfileProps) {
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+};
+
+export default function Profile({ userId, onLogout }: ProfileProps) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -155,8 +164,10 @@ export default function Profile({ onLogout }: ProfileProps) {
   };
 
   useEffect(() => {
-    loadUserProfile();
-  }, []);
+    if (userId) {
+      loadUserProfile();
+    }
+  }, [userId]);
 
   if (loading) {
     return (

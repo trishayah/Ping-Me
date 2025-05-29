@@ -63,6 +63,7 @@ function AuthenticatedTabs({
   onLogout,
 }: {
   userData: {
+    userId: string; // Added userId
     userType: "student" | "organizer";
     email: string;
     firstName: string;
@@ -136,6 +137,7 @@ function AuthenticatedTabs({
         name="Profile"
         children={(props) => (
           <Profile
+            userId={userData.userId} // Pass userId prop
             onLogout={onLogout}
             onLogin={(
               email,
@@ -164,11 +166,13 @@ export default function RootLayout() {
     "loading" | "login" | "signup" | "authenticated"
   >("loading");
   const [userData, setUserData] = useState<{
+    userId: string; // Added userId
     userType: "student" | "organizer";
     email: string;
     firstName: string;
     userName: string;
   } | null>(null);
+  const [loginKey, setLoginKey] = useState(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -178,12 +182,14 @@ export default function RootLayout() {
   }, []);
 
   const handleLogin = (
+    userId: string,
     email: string,
     password: string,
     userType: "student" | "organizer",
     firstName: string
   ) => {
     setUserData({
+      userId, // Store userId
       userType,
       email,
       firstName,
@@ -201,11 +207,13 @@ export default function RootLayout() {
   };
 
   const handleSignupSuccess = (
+    userId: string, // Added userId parameter
     email: string,
     userType: "student" | "organizer",
     firstName: string
   ) => {
     setUserData({
+      userId, // Store userId
       userType,
       email,
       firstName,
@@ -216,6 +224,7 @@ export default function RootLayout() {
 
   const handleLogout = () => {
     setUserData(null);
+    setLoginKey(prev => prev + 1);
     setAppState("login");
   };
 
@@ -233,7 +242,7 @@ export default function RootLayout() {
   }
 
   if (appState === "login") {
-    return <LoginPage onLogin={handleLogin} onSignup={handleSignup} />;
+    return <LoginPage key={loginKey} onLogin={handleLogin} onSignup={handleSignup} />;
   }
 
   if (!userData) return null;
