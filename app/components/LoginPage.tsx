@@ -55,8 +55,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
       }
 
       setError("");
-      // Pass userType to onLogin or navigation
-      onLogin(email, password, userData.userType); // <-- add userType
+onLogin(email, password, userData.userType, userData.firstName);
+
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");

@@ -16,14 +16,24 @@ import {
   Settings,
 } from "react-native-feather";
 
-import type { StackNavigationProp } from '@react-navigation/stack';
+// import type { StackNavigationProp } from '@react-navigation/stack';
+// import { useLocalSearchParams } from 'expo-router';
+
 
 type HomepageProps = {
-  userType?: "student" | "organizer";
-  navigation: StackNavigationProp<any>;
+  navigation: any;
+  route?: any;
+  userData?: {
+    userType: "student" | "organizer";
+    email: string;
+    firstName: string;
+    userName: string;
+  };
 };
 
-const Homepage: React.FC<HomepageProps> = ({ userType = "student", navigation }) => {
+const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
+  const firstName = userData?.firstName || "User";
+  const userType = userData?.userType || "student";
   const renderOrganizerStats = () => (
     <View style={styles.statsContainer}>
       <View style={styles.statCard}>
@@ -67,13 +77,9 @@ const Homepage: React.FC<HomepageProps> = ({ userType = "student", navigation })
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.userInfo}>
-          <Image
-            style={styles.avatar}
-            source={{ uri: "https://via.placeholder.com/40" }}
-          />
           <View>
             <Text style={styles.welcome}>Welcome back,</Text>
-            <Text style={styles.userName}>User</Text>
+            <Text style={styles.userName}>{firstName}</Text>
           </View>
         </View>
         <TouchableOpacity>

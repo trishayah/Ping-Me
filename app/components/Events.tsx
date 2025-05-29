@@ -52,6 +52,9 @@ const Events = ({
   initialEvents?: any[];
   navigation: NavigationProp<any>;
 }) => {
+  // Debug log for userType
+  console.log("Events component userType:", userType);
+
   const [events, setEvents] = useState<EventData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
@@ -169,7 +172,7 @@ const Events = ({
     if (!type) {
       return { backgroundColor: "#e2e8f0", color: "#334155" };
     }
-    
+
     const eventType = (type || "").toLowerCase();
     switch (eventType) {
       case "hackathon":
@@ -216,9 +219,13 @@ const Events = ({
           {userType === "organizer" && (
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => navigation.navigate("AddEvent")}
+              onPress={() => {
+                console.log("Add button pressed");
+                navigation.navigate("AddEvent");
+              }}
             >
-              <Plus width={22} height={22} style={styles.addIcon} />
+              <Plus width={22} height={22} color={styles.addIcon.color} />
+              {/* <Text style={{color: 'white'}}>Add</Text> // Uncomment for debug */}
             </TouchableOpacity>
           )}
         </View>
@@ -338,15 +345,6 @@ const Events = ({
           </Text>
         </View>
       )}
-
-      {userType !== "student" && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => navigation.navigate("AddEvent")}
-        >
-          <Plus width={24} height={24} style={styles.fabIcon} />
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 };
@@ -356,7 +354,10 @@ type EventCardProps = {
   onPress: () => void;
   isAttending: boolean;
   formatDate: (dateString: string) => string;
-  getEventTypeBadgeStyle: (type: string) => { backgroundColor: string; color: string };
+  getEventTypeBadgeStyle: (type: string) => {
+    backgroundColor: string;
+    color: string;
+  };
 };
 
 const EventCard: React.FC<EventCardProps> = ({
@@ -456,7 +457,7 @@ const EventDetails = ({
     if (!type) {
       return { backgroundColor: "#e2e8f0", color: "#334155" };
     }
-    
+
     switch (type.toLowerCase()) {
       case "hackathon":
         return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
@@ -951,24 +952,3 @@ const styles = StyleSheet.create({
 });
 
 export default Events;
-
-// Fixed function with null check
-function getEventTypeBadgeStyle(type: string): { backgroundColor: string; color: string } {
-  if (!type) {
-    return { backgroundColor: "#e2e8f0", color: "#334155" };
-  }
-  
-  switch (type.toLowerCase()) {
-    case "hackathon":
-      return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
-    case "workshop":
-      return { backgroundColor: "#dcfce7", color: "#166534" };
-    case "seminar":
-    case "webinar":
-      return { backgroundColor: "#dbeafe", color: "#1e40af" };
-    case "conference":
-      return { backgroundColor: "#fef9c3", color: "#854d0e" };
-    default:
-      return { backgroundColor: "#e2e8f0", color: "#334155" };
-  }
-}

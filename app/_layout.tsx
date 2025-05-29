@@ -12,10 +12,9 @@ import Homepage from "./components/Homepage";
 
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
-import Entypo from 'react-native-vector-icons/Entypo';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-
+import Entypo from "react-native-vector-icons/Entypo";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import Ionicons from "react-native-vector-icons/Ionicons";
 
 const Tab = createBottomTabNavigator();
 
@@ -26,7 +25,18 @@ const Tab = createBottomTabNavigator();
 //   </View>
 // );
 
-function AuthenticatedTabs() {
+function AuthenticatedTabs({
+  userData,
+  onLogout,
+}: {
+  userData: {
+    userType: string;
+    email: string;
+    firstName: string;
+    userName: string;
+  };
+  onLogout: () => void;
+}) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -37,57 +47,63 @@ function AuthenticatedTabs() {
     >
       <Tab.Screen
         name="Home"
-        component={Homepage}
+        children={(props) => <Homepage {...props} userData={userData} />}
         initialParams={{ name: "Home" }}
         options={{
           headerTitle: () => <HeaderTitle text="Home" />,
           tabBarIcon: ({ color }) => (
             <Entypo name="home" color="#000" size={24} />
-          )
+          ),
         }}
       />
       <Tab.Screen
         name="Events"
-        component={EventsPage}
+        children={(props) => <EventsPage {...props} userData={userData} />}
         initialParams={{ name: "Events" }}
         options={{
           headerTitle: () => <HeaderTitle text="Events" />,
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="event" color="#000" size={24} />
-          )
+          ),
         }}
       />
       <Tab.Screen
         name="Transactions"
-        component={Transactions}
+        children={(props) => <Transactions {...props} userData={userData} />}
         initialParams={{ name: "Transactions" }}
         options={{
           headerTitle: () => <HeaderTitle text="Transaction" />,
           tabBarIcon: ({ color }) => (
-            <MaterialIcons name="published-with-changes" color="#000" size={24} />
-          )
+            <MaterialIcons
+              name="published-with-changes"
+              color="#000"
+              size={24}
+            />
+          ),
         }}
       />
       <Tab.Screen
         name="Reports"
-        component={Reports}
+        children={(props) => <Reports {...props} userData={userData} />}
         initialParams={{ name: "Reports" }}
         options={{
           headerTitle: () => <HeaderTitle text="Reports" />,
           tabBarIcon: ({ color }) => (
             <Ionicons name="journal" color="#000" size={24} />
-          )
+          ),
         }}
       />
       <Tab.Screen
         name="Profile"
-        component={Profile}
+        children={(props) => (
+          <Profile {...props} userData={userData} onLogout={onLogout} />
+        )}
         initialParams={{ name: "Profile" }}
         options={{
           headerTitle: () => <HeaderTitle text="Profile" />,
           tabBarIcon: ({ color }) => (
             <Ionicons name="person" color="#000" size={24} />
-          )
+          ),
         }}
       />
     </Tab.Navigator>
@@ -98,6 +114,12 @@ export default function RootLayout() {
   const [appState, setAppState] = useState<
     "loading" | "login" | "signup" | "authenticated"
   >("loading");
+  const [userData, setUserData] = useState<{
+    userType: "student" | "organizer";
+    email: string;
+    firstName: string;
+    userName: string;
+  } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -106,10 +128,19 @@ export default function RootLayout() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleLogin = (email: string, password: string) => {
-    console.log("Login with:", email, password);
+  const handleLogin = (
+    email: string,
+    password: string,
+    userType: "student" | "organizer",
+    firstName: string
+  ) => {
+    setUserData({
+      userType,
+      email,
+      firstName,
+      userName: firstName, // Or keep email.split('@')[0] if you prefer
+    });
     setAppState("authenticated");
-    return true;
   };
 
   const handleSignup = () => {
@@ -120,11 +151,22 @@ export default function RootLayout() {
     setAppState("login");
   };
 
-  const handleSignupSuccess = () => {
+  const handleSignupSuccess = (
+    email: string,
+    userType: "student" | "organizer",
+    firstName: string
+  ) => {
+    setUserData({
+      userType,
+      email,
+      firstName,
+      userName: firstName,
+    });
     setAppState("authenticated");
   };
 
   const handleLogout = () => {
+    setUserData(null);
     setAppState("login");
   };
 
@@ -134,7 +176,10 @@ export default function RootLayout() {
 
   if (appState === "signup") {
     return (
-      <SignUpPage onBack={handleBackToLogin} onSignupSuccess={handleSignupSuccess} />
+      <SignUpPage
+        onBack={handleBackToLogin}
+        onSignupSuccess={handleSignupSuccess}
+      />
     );
   }
 
@@ -142,10 +187,8 @@ export default function RootLayout() {
     return <LoginPage onLogin={handleLogin} onSignup={handleSignup} />;
   }
 
-  // Pass logout handler to authenticated tabs
-  return <AuthenticatedTabs />;
+  return <AuthenticatedTabs userData={userData} onLogout={handleLogout} />;
 }
-
 
 // Custom header title with safety check
 const HeaderTitle = ({ text }: { text?: string }) => (

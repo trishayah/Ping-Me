@@ -28,8 +28,9 @@ const db = getFirestore(firebaseApp);
 
 interface SignUpPageProps {
   onBack: () => void;
-  onSignupSuccess: () => void;
+  onSignupSuccess: (email: string, userType: "student" | "organizer") => void;
 }
+
 const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
   const navigation = useNavigation();
   const [userType, setUserType] = useState("");
@@ -41,7 +42,7 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSignup = async () => {
+  const handleSubmit = async () => {
     setError("");
     setLoading(true);
 
@@ -94,7 +95,7 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
         firstName: fname.trim(),
         lastName: lname.trim(),
         email: email.toLowerCase().trim(),
-        password: password, // Note: In production, you should hash this password
+        password: password, 
         createdAt: serverTimestamp(),
         displayName: `${fname.trim()} ${lname.trim()}`,
       });
@@ -107,16 +108,26 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
       setPassword("");
       setConfirmPassword("");
 
-      // Success alert
-      Alert.alert("Success!", "Your account has been created successfully.", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Redirect to login page after successful signup
-            onBack();
-          },
-        },
-      ]);
+      // // Success alert with navigation to homepage
+      // Alert.alert("Success!", "Your account has been created successfully.", [
+      //   {
+      //     text: "OK",
+      //     onPress: () => {
+      //       // Navigate to homepage
+      //       navigation.reset({
+      //         index: 0,
+      //         routes: [{ name: "Home" }],
+      //       });
+      //     },
+      //   },
+      // ]);
+      console.log("[SignUpPage] Calling onSignupSuccess with:", {
+      email: email.toLowerCase().trim(),
+      userType,
+      firstName: fname.trim()
+   });
+   onSignupSuccess(email.toLowerCase().trim(), userType as "student" | "organizer", fname.trim());
+
     } catch (error: any) {
       console.error("Signup error:", error);
 
@@ -266,7 +277,7 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
                   !confirmPassword) &&
                   styles.signupButtonDisabled,
               ]}
-              onPress={handleSignup}
+              onPress={handleSubmit}
               disabled={
                 loading ||
                 !userType ||
