@@ -26,7 +26,7 @@ type Metrics = {
 const calculatePopularCategories = (events: any[]): PopularCategory[] => {
   const categories = events.reduce((acc: Record<string, number>, event) => {
     // Handle undefined or null eventType
-    const eventType = event.eventType?.toLowerCase() || 'uncategorized';
+    const eventType = event.eventType?.toLowerCase() || "uncategorized";
     acc[eventType] = (acc[eventType] || 0) + 1;
     return acc;
   }, {});
@@ -38,30 +38,47 @@ const calculatePopularCategories = (events: any[]): PopularCategory[] => {
 };
 
 // Helper function to calculate monthly statistics
-const calculateMonthlyStats = (events: any[]): MonthlyStat[] => {
-  const monthlyData = events.reduce((acc: Record<string, { events: number; attendees: number }>, event) => {
-    // Handle date parsing safely
-    let month = 'Unknown';
-    if (event.date) {
-      try {
-        const date = new Date(event.date);
-        if (!isNaN(date.getTime())) {
-          month = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-        }
-      } catch (error) {
-        console.warn('Invalid date format:', event.date);
-      }
+const calculateMonthlyStats = (
+  events: any[],
+  registrations: any[]
+): MonthlyStat[] => {
+  // Map eventId to registrations for attendee count
+  const eventIdToAttendees: Record<string, number> = {};
+  registrations.forEach((reg) => {
+    if (reg.eventId) {
+      eventIdToAttendees[reg.eventId] =
+        (eventIdToAttendees[reg.eventId] || 0) + 1;
     }
+  });
 
-    if (!acc[month]) {
-      acc[month] = { events: 0, attendees: 0 };
-    }
-    
-    acc[month].events += 1;
-    acc[month].attendees += event.attendees?.length || 0;
-    
-    return acc;
-  }, {});
+  const monthlyData = events.reduce(
+    (acc: Record<string, { events: number; attendees: number }>, event) => {
+      let month = "Unknown";
+      if (event.date) {
+        try {
+          const date = new Date(event.date);
+          if (!isNaN(date.getTime())) {
+            month = date.toLocaleDateString("en-US", {
+              month: "short",
+              year: "numeric",
+            });
+          }
+        } catch (error) {
+          console.warn("Invalid date format:", event.date);
+        }
+      }
+
+      if (!acc[month]) {
+        acc[month] = { events: 0, attendees: 0 };
+      }
+
+      acc[month].events += 1;
+      acc[month].attendees += eventIdToAttendees[event.id] || 0;
+
+      return acc;
+    },
+    {}
+  );
 
   return Object.entries(monthlyData)
     .map(([month, stats]) => ({ month, ...stats }))
@@ -85,6 +102,9 @@ const Reports = ({ userType = "organizer" }) => {
         setLoading(true);
         const eventsRef = collection(db, "events");
         const eventsSnap = await getDocs(eventsRef);
+        const registrationsSnap = await getDocs(
+          collection(db, "registrations")
+        );
 
         type EventType = {
           id: string;
@@ -100,12 +120,13 @@ const Reports = ({ userType = "organizer" }) => {
           ...doc.data(),
         }));
 
+        const registrationsData = registrationsSnap.docs.map((doc) =>
+          doc.data()
+        );
+
         // Calculate metrics
         const totalEvents = eventsData.length;
-        const totalAttendees = eventsData.reduce(
-          (sum, event) => sum + (event.attendees?.length || 0),
-          0
-        );
+        const totalAttendees = registrationsData.length;
 
         setMetrics({
           totalEvents,
@@ -118,7 +139,7 @@ const Reports = ({ userType = "organizer" }) => {
             (e) => e.status?.toLowerCase() === "upcoming"
           ).length,
           popularCategories: calculatePopularCategories(eventsData),
-          monthlyStats: calculateMonthlyStats(eventsData),
+          monthlyStats: calculateMonthlyStats(eventsData, registrationsData),
         });
       } catch (error) {
         console.error("Error fetching metrics: ", error);
@@ -157,9 +178,7 @@ const Reports = ({ userType = "organizer" }) => {
 
         <View style={styles.metricCard}>
           <TrendingUp width={24} height={24} style={styles.metricIcon} />
-          <Text style={styles.metricNumber}>
-            {metrics.averageAttendance}
-          </Text>
+          <Text style={styles.metricNumber}>{metrics.averageAttendance}</Text>
           <Text style={styles.metricLabel}>Avg. Attendance</Text>
         </View>
 
@@ -213,8 +232,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   title: {
     fontSize: 24,

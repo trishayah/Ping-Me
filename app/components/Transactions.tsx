@@ -7,7 +7,13 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Calendar, Users, User } from "react-native-feather";
-import { collection, query, onSnapshot, where } from "firebase/firestore";
+import {
+  collection,
+  query,
+  onSnapshot,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { firebaseApp, db } from "../../firebaseConfig";
 
 type Registration = {
@@ -17,7 +23,7 @@ type Registration = {
   eventId: string;
   eventName: string;
   registrationDate: string | number | Date;
-  status: 'confirmed' | 'pending' | 'cancelled' | 'no-show';
+  status: "confirmed" | "pending" | "cancelled" | "no-show";
 };
 
 type Event = {
@@ -32,63 +38,82 @@ const Transactions = ({ userType = "organizer" }) => {
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
 
   useEffect(() => {
-    // Listen to events collection
-    const eventsQuery = query(collection(db, "events"));
-    const unsubscribeEvents = onSnapshot(eventsQuery, async (querySnapshot) => {
-      const eventsData = await Promise.all(
-        querySnapshot.docs.map(async (doc) => {
-          const eventData = { id: doc.id, ...doc.data() } as any;
-          
-          // Get registrations for this event
-          const registrationsQuery = query(
-            collection(db, "registrations"),
-            where("eventId", "==", doc.id)
-          );
-          
-          return new Promise<Event>((resolve) => {
-            onSnapshot(registrationsQuery, (regSnapshot) => {
-              const registrations = regSnapshot.docs.map((regDoc) => ({
-                id: regDoc.id,
-                ...regDoc.data(),
-              })) as Registration[];
-              
-              resolve({
-                id: eventData.id,
-                eventName: eventData.eventName,
-                attendees: eventData.attendees,
-                registrations,
-              });
-            });
-          });
-        })
-      );
-      
-      setEvents(eventsData);
-    });
+    // Fetch all events and their registrations from Firestore
+    const fetchAllData = async () => {
+      try {
+        // Get all events
+        const eventsSnapshot = await getDocs(collection(db, "events"));
+        const eventsData: Event[] = [];
 
-    return () => unsubscribeEvents();
+        for (const docSnap of eventsSnapshot.docs) {
+          const eventData = docSnap.data();
+          // Get all registrations for this event
+          const registrationsSnapshot = await getDocs(
+            query(
+              collection(db, "registrations"),
+              where("eventId", "==", docSnap.id)
+            )
+          );
+          const registrations: Registration[] = registrationsSnapshot.docs.map(
+            (regDoc) => {
+              const regData = regDoc.data();
+              return {
+                id: regDoc.id,
+                attendeeName: regData.attendeeName || "",
+                attendeeEmail: regData.attendeeEmail || "",
+                eventId: regData.eventId,
+                eventName: regData.eventName,
+                registrationDate: regData.registrationDate,
+                status: regData.status,
+              };
+            }
+          );
+
+          eventsData.push({
+            id: docSnap.id,
+            eventName: eventData.eventName || eventData.name || "",
+            attendees: eventData.attendees || 0,
+            registrations,
+          });
+        }
+
+        setEvents(eventsData);
+      } catch (e) {
+        setEvents([]);
+      }
+    };
+
+    fetchAllData();
   }, []);
 
   const renderEventOverview = ({ item }: { item: Event }) => {
     const totalRegistrations = item.registrations.length;
     const availableSpots = item.attendees - totalRegistrations;
-    const confirmedRegistrations = item.registrations.filter(r => r.status === 'confirmed').length;
+    const confirmedRegistrations = item.registrations.filter(
+      (r) => r.status === "confirmed"
+    ).length;
 
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.eventCard}
-        onPress={() => setSelectedEvent(selectedEvent === item.id ? null : item.id)}
+        onPress={() =>
+          setSelectedEvent(selectedEvent === item.id ? null : item.id)
+        }
       >
         <View style={styles.eventHeader}>
           <Text style={styles.eventName}>{item.eventName}</Text>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: availableSpots > 0 ? "#dcfce7" : "#fee2e2" }
-          ]}>
-            <Text style={[
-              styles.statusText,
-              { color: availableSpots > 0 ? "#166534" : "#991b1b" }
-            ]}>
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: availableSpots > 0 ? "#dcfce7" : "#fee2e2" },
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                { color: availableSpots > 0 ? "#166534" : "#991b1b" },
+              ]}
+            >
               {availableSpots > 0 ? "Open" : "Full"}
             </Text>
           </View>
@@ -110,36 +135,19 @@ const Transactions = ({ userType = "organizer" }) => {
 
         {selectedEvent === item.id && (
           <View style={styles.registrationsList}>
-            <Text style={styles.registrationsTitle}>Registrations:</Text>
+            <Text style={styles.registrationsTitle}>Attendees:</Text>
             {item.registrations.length === 0 ? (
               <Text style={styles.noRegistrations}>No registrations yet</Text>
             ) : (
               item.registrations.map((registration) => (
                 <View key={registration.id} style={styles.registrationItem}>
                   <View style={styles.registrationInfo}>
-                    <View style={styles.registrationHeader}>
-                      <Text style={styles.attendeeName}>{registration.attendeeName}</Text>
-                      <View style={[
-                        styles.statusBadge,
-                        styles.smallBadge,
-                        { backgroundColor: getStatusColor(registration.status) }
-                      ]}>
-                        <Text style={[
-                          styles.statusText,
-                          styles.smallStatusText,
-                          { color: getStatusTextColor(registration.status) }
-                        ]}>
-                          {registration.status}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.attendeeEmail}>{registration.attendeeEmail}</Text>
-                    <View style={styles.registrationDate}>
-                      <Calendar width={14} height={14} style={styles.smallIcon} />
-                      <Text style={styles.dateText}>
-                        Registered: {new Date(registration.registrationDate).toLocaleDateString()}
-                      </Text>
-                    </View>
+                    <Text style={styles.attendeeName}>
+                      {registration.attendeeName}
+                    </Text>
+                    <Text style={styles.attendeeEmail}>
+                      {registration.attendeeEmail}
+                    </Text>
                   </View>
                 </View>
               ))
@@ -152,21 +160,31 @@ const Transactions = ({ userType = "organizer" }) => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'confirmed': return "#dcfce7";
-      case 'pending': return "#fef3c7";
-      case 'cancelled': return "#fee2e2";
-      case 'no-show': return "#f3f4f6";
-      default: return "#f3f4f6";
+      case "confirmed":
+        return "#dcfce7";
+      case "pending":
+        return "#fef3c7";
+      case "cancelled":
+        return "#fee2e2";
+      case "no-show":
+        return "#f3f4f6";
+      default:
+        return "#f3f4f6";
     }
   };
 
   const getStatusTextColor = (status: string) => {
     switch (status) {
-      case 'confirmed': return "#166534";
-      case 'pending': return "#92400e";
-      case 'cancelled': return "#991b1b";
-      case 'no-show': return "#4b5563";
-      default: return "#4b5563";
+      case "confirmed":
+        return "#166534";
+      case "pending":
+        return "#92400e";
+      case "cancelled":
+        return "#991b1b";
+      case "no-show":
+        return "#4b5563";
+      default:
+        return "#4b5563";
     }
   };
 

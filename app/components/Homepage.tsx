@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -15,10 +15,13 @@ import {
   Bell,
   Settings,
 } from "react-native-feather";
+import { getFirestore, collection, getDocs } from "firebase/firestore";
+import { firebaseApp } from "../../firebaseConfig";
+
+const db = getFirestore(firebaseApp);
 
 // import type { StackNavigationProp } from '@react-navigation/stack';
 // import { useLocalSearchParams } from 'expo-router';
-
 
 type HomepageProps = {
   navigation: any;
@@ -34,18 +37,108 @@ type HomepageProps = {
 const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
   const firstName = userData?.firstName || "User";
   const userType = userData?.userType || "student";
+
+  // State for Firestore data
+  const [totalEvents, setTotalEvents] = useState(0);
+  const [totalAttendees, setTotalAttendees] = useState(0);
+  const [upcomingEvents, setUpcomingEvents] = useState(0);
+  const [upcomingEventsList, setUpcomingEventsList] = useState<any[]>([]);
+
+  // For student RSVP events
+  const [studentRSVPEvents, setStudentRSVPEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const eventsSnapshot = await getDocs(collection(db, "events"));
+        let events = [];
+        let attendeesSum = 0;
+        let upcoming = 0;
+        let now = new Date();
+
+        eventsSnapshot.forEach((doc) => {
+          const data = doc.data();
+          events.push({ id: doc.id, ...data });
+          // Sum attendees (assume number or array)
+          if (typeof data.attendees === "number") {
+            attendeesSum += data.attendees;
+          } else if (Array.isArray(data.attendees)) {
+            attendeesSum += data.attendees.length;
+          }
+          // Count upcoming events
+          if (data.date) {
+            const eventDate = new Date(data.date);
+            if (eventDate >= now) {
+              upcoming += 1;
+            }
+          }
+        });
+
+        setTotalEvents(events.length);
+        setTotalAttendees(attendeesSum);
+        setUpcomingEvents(upcoming);
+
+        // For upcoming events list (sorted by date, next 5)
+        const upcomingList = events
+          .filter((ev) => ev.date && new Date(ev.date) >= now)
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .slice(0, 5);
+        setUpcomingEventsList(upcomingList);
+      } catch (e) {
+        // fallback to 0s if error
+        setTotalEvents(0);
+        setTotalAttendees(0);
+        setUpcomingEvents(0);
+        setUpcomingEventsList([]);
+      }
+    };
+    fetchStats();
+
+    // Fetch RSVP'd events for students
+    const fetchStudentRSVP = async () => {
+      if (userType !== "student" || !userData?.email) {
+        setStudentRSVPEvents([]);
+        return;
+      }
+      try {
+        // Assume a "registrations" collection with attendeeEmail and eventId
+        const registrationsSnapshot = await getDocs(
+          collection(db, "registrations")
+        );
+        const myRegistrations = registrationsSnapshot.docs
+          .map((doc) => doc.data())
+          .filter((reg) => reg.attendeeEmail === userData.email);
+
+        // Get eventIds
+        const eventIds = myRegistrations.map((reg) => reg.eventId);
+
+        // Fetch events for those eventIds
+        const eventsSnapshot = await getDocs(collection(db, "events"));
+        const myEvents = eventsSnapshot.docs
+          .filter((doc) => eventIds.includes(doc.id))
+          .map((doc) => ({ id: doc.id, ...doc.data() }));
+
+        setStudentRSVPEvents(myEvents);
+      } catch (e) {
+        setStudentRSVPEvents([]);
+      }
+    };
+
+    fetchStudentRSVP();
+  }, [userType, userData?.email]);
+
   const renderOrganizerStats = () => (
     <View style={styles.statsContainer}>
       <View style={styles.statCard}>
-        <Text style={styles.statNumber}>12</Text>
+        <Text style={styles.statNumber}>{totalEvents}</Text>
         <Text style={styles.statLabel}>Total Events</Text>
       </View>
       <View style={styles.statCard}>
-        <Text style={styles.statNumber}>458</Text>
+        <Text style={styles.statNumber}>{totalAttendees}</Text>
         <Text style={styles.statLabel}>Attendees</Text>
       </View>
       <View style={styles.statCard}>
-        <Text style={styles.statNumber}>8</Text>
+        <Text style={styles.statNumber}>{upcomingEvents}</Text>
         <Text style={styles.statLabel}>Upcoming</Text>
       </View>
     </View>
@@ -56,7 +149,7 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
       {userType === "organizer" ? (
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => navigation.navigate("AddEvent")}
+          onPress={() => navigation.navigate("Events", { screen: "AddEvent" })}
         >
           <PlusCircle width={24} height={24} style={styles.actionIcon} />
           <Text style={styles.actionText}>Create Event</Text>
@@ -74,7 +167,7 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1 }}>
       <View style={styles.header}>
         <View style={styles.userInfo}>
           <View>
@@ -82,10 +175,6 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
             <Text style={styles.userName}>{firstName}</Text>
           </View>
         </View>
-        <TouchableOpacity>
-          {/* <Bell width={24} height={24} style={styles.headerIcon} /> */}
-           <Bell width={24} height={24} color={styles.headerIcon.color} />
-        </TouchableOpacity>
       </View>
 
       {userType === "organizer" && renderOrganizerStats()}
@@ -94,25 +183,109 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
       {renderQuickActions()}
 
       <Text style={styles.sectionTitle}>Upcoming Events</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.eventsScroll}
-      >
-        {/* Example Event Cards */}
-        <TouchableOpacity style={styles.eventCard}>
-          <View style={styles.eventDateBadge}>
-            <Text style={styles.eventDateDay}>15</Text>
-            <Text style={styles.eventDateMonth}>MAY</Text>
+      <View style={styles.verticalEventsList}>
+        {upcomingEventsList.length > 0 ? (
+          upcomingEventsList.map((event) => {
+            const eventDate = event.date ? new Date(event.date) : null;
+            const day = eventDate ? eventDate.getDate() : "--";
+            const month = eventDate
+              ? eventDate
+                  .toLocaleString("en-US", { month: "short" })
+                  .toUpperCase()
+              : "--";
+            const attendeesCount =
+              typeof event.attendees === "number"
+                ? event.attendees
+                : Array.isArray(event.attendees)
+                ? event.attendees.length
+                : 0;
+            return (
+              <TouchableOpacity key={event.id} style={styles.eventCard}>
+                <View style={styles.eventDateBadge}>
+                  <Text style={styles.eventDateDay}>{day}</Text>
+                  <Text style={styles.eventDateMonth}>{month}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.eventTitle}>
+                    {event.name || "Untitled"}
+                  </Text>
+                  <View style={styles.eventDetailBelow}>
+                    <Users width={14} height={14} style={styles.eventIcon} />
+                    <Text style={styles.eventDetailText}>
+                      {attendeesCount} attending
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        ) : (
+          <View
+            style={[
+              styles.eventCard,
+              { justifyContent: "center", alignItems: "center" },
+            ]}
+          >
+            <Text style={{ color: "#64748b" }}>No upcoming events</Text>
           </View>
-          <Text style={styles.eventTitle}>Tech Conference 2024</Text>
-          <View style={styles.eventDetail}>
-            <Users width={14} height={14} style={styles.eventIcon} />
-            <Text style={styles.eventDetailText}>150 attending</Text>
+        )}
+      </View>
+
+      {/* Student RSVP Events */}
+      {userType === "student" && (
+        <>
+          <Text style={styles.sectionTitle}>My Registered Events</Text>
+          <View style={styles.verticalEventsList}>
+            {studentRSVPEvents.length > 0 ? (
+              studentRSVPEvents.map((event) => {
+                const eventDate = event.date ? new Date(event.date) : null;
+                const day = eventDate ? eventDate.getDate() : "--";
+                const month = eventDate
+                  ? eventDate
+                      .toLocaleString("en-US", { month: "short" })
+                      .toUpperCase()
+                  : "--";
+                const attendeesCount =
+                  typeof event.attendees === "number"
+                    ? event.attendees
+                    : Array.isArray(event.attendees)
+                    ? event.attendees.length
+                    : 0;
+                return (
+                  <TouchableOpacity key={event.id} style={styles.eventCard}>
+                    <View style={styles.eventDateBadge}>
+                      <Text style={styles.eventDateDay}>{day}</Text>
+                      <Text style={styles.eventDateMonth}>{month}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.eventTitle}>
+                        {event.name || "Untitled"}
+                      </Text>
+                      <View style={styles.eventDetailBelow}>
+                        <Users width={14} height={14} style={styles.eventIcon} />
+                        <Text style={styles.eventDetailText}>
+                          {attendeesCount} attending
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <View
+                style={[
+                  styles.eventCard,
+                  { justifyContent: "center", alignItems: "center" },
+                ]}
+              >
+                <Text style={{ color: "#64748b" }}>
+                  You have not registered for any events
+                </Text>
+              </View>
+            )}
           </View>
-        </TouchableOpacity>
-        {/* Add more event cards as needed */}
-      </ScrollView>
+        </>
+      )}
     </ScrollView>
   );
 };
@@ -210,39 +383,53 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
-    marginRight: 12,
-    width: 200,
+    marginBottom: 16,
+    width: "100%",
+    minHeight: 90,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    flexDirection: "row",
+    alignItems: "center",
   },
   eventDateBadge: {
     backgroundColor: "#f1f5f9",
     borderRadius: 8,
-    padding: 8,
-    alignSelf: "flex-start",
-    marginBottom: 12,
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+    minWidth: 48,
   },
   eventDateDay: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#2563eb",
+    textAlign: "center",
   },
   eventDateMonth: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#64748b",
+    textAlign: "center",
   },
   eventTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1e293b",
-    marginBottom: 8,
+    marginBottom: 4,
+    flexShrink: 1,
+    flexWrap: "wrap",
   },
   eventDetail: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  eventDetailBelow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
   },
   eventIcon: {
     color: "#64748b",
@@ -251,6 +438,10 @@ const styles = StyleSheet.create({
   eventDetailText: {
     fontSize: 12,
     color: "#64748b",
+  },
+  verticalEventsList: {
+    paddingHorizontal: 16,
+    flexDirection: "column",
   },
 });
 
