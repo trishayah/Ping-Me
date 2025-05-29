@@ -4,7 +4,6 @@ import { useState } from "react";
 import * as ImagePicker from "expo-image-picker";
 import TimePicker from "@/components/time-picker";
 import DatePicker from "@/components/date-picker";
-// Add Firestore imports
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 import { firebaseApp } from "../../firebaseConfig";
 
@@ -21,115 +20,104 @@ export default function AddEvent() {
     const [attendees, setAttendees] = useState("");
 
     const pickImage = async () => {
-        // request for camera roll permission
         const camrollPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-        if(camrollPermission.granted === false) {
-            Alert.alert("Permission Required", "Permission to access camera roll is required")
+        if (!camrollPermission.granted) {
+            Alert.alert("Permission Required", "Permission to access camera roll is required");
             return;
         }
-
-        // open camera roll
         const camrollResult = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
             aspect: [4, 3],
             quality: 1,
-        })
-
-        if(!camrollResult.canceled){
+        });
+        if (!camrollResult.canceled) {
             setImage(camrollResult.assets[0].uri);
         }
-    }
+    };
 
     const takePhoto = async () => {
-        // request for camera permission
         const camPermission = await ImagePicker.requestCameraPermissionsAsync();
-
-        if(camPermission.granted === false) {
-            Alert.alert("Permission Required", "Permission to access camera is required")
+        if (!camPermission.granted) {
+            Alert.alert("Permission Required", "Permission to access camera is required");
             return;
         }
-
-        // open camera
         const camResult = await ImagePicker.launchCameraAsync({
             allowsEditing: true,
             aspect: [4, 3],
             quality: 1,
-        })
-
-        if(!camResult.canceled){
+        });
+        if (!camResult.canceled) {
             setImage(camResult.assets[0].uri);
         }
-    }
+    };
 
-    // cam roll or take photo option
     const eventImgOptions = () => {
         Alert.alert("Select Image", "Choose option to select an image", [
             { text: "Cancel", style: "cancel" },
             { text: "Camera", onPress: takePhoto },
             { text: "Gallery", onPress: pickImage },
-        ])
-    }
+        ]);
+    };
 
-    const handleTimeChange = (newTime: any) => {
-        setEventTime(newTime);
-    }
-
-    const handleDateChange = (newDate: any) => {
-        setEventDate(newDate);
-    }
+    const handleTimeChange = (newTime: Date) => setEventTime(newTime);
+    const handleDateChange = (newDate: Date) => setEventDate(newDate);
 
     const handleSaveEvent = async () => {
-    if (!eventName || !eventDescription || !eventCategory || !eventLocation || !eventDate || !eventTime || !attendees) {
-        Alert.alert("Missing Fields", "Please fill in all fields.");
-        return;
-    }
-    try {
-        await addDoc(collection(db, "events"), {
-            name: eventName,
-            description: eventDescription,
-            category: eventCategory,
-            location: eventLocation,
-            date: eventDate.toISOString(),
-            time: eventTime.toISOString(),
-            attendees: Number(attendees),
-            image: image || null,
-            createdAt: new Date().toISOString(),
-        });
+        if (
+            !eventName ||
+            !eventDescription ||
+            !eventCategory ||
+            !eventLocation ||
+            !eventDate ||
+            !eventTime ||
+            !attendees
+        ) {
+            Alert.alert("Missing Fields", "Please fill in all fields.");
+            return;
+        }
 
-        Alert.alert("Success", "Event Saved!");
+        if (eventCategory === "") {
+            Alert.alert("Invalid Category", "Please select a valid event category.");
+            return;
+        }
 
-        setEventName("");
-        setEventDescription("");
-        setEventCategory("");
-        setEventLocation("");
-        setEventDate(undefined);
-        setEventTime(undefined);
-        setAttendees("");
-        setImage(null);
-        
-    } catch (error) {
-        Alert.alert("Error", "Failed to save event.");
-        console.error("Firestore error:", error);
-    }
-};
+        try {
+            await addDoc(collection(db, "events"), {
+                name: eventName,
+                description: eventDescription,
+                category: eventCategory.toLowerCase(),
+                location: eventLocation,
+                date: eventDate.toISOString(),
+                time: eventTime.toISOString(),
+                attendees: Number(attendees),
+                image: image || null,
+                createdAt: new Date().toISOString(),
+            });
+
+            Alert.alert("Success", "Your event has been successfully saved.");
+            // Reset form
+            setEventName("");
+            setEventDescription("");
+            setEventCategory("");
+            setEventLocation("");
+            setEventDate(undefined);
+            setEventTime(undefined);
+            setAttendees("");
+            setImage(null);
+        } catch (error) {
+            Alert.alert("Error", "Failed to save event.");
+            console.error("Firestore error:", error);
+        }
+    };
 
     return (
-        
         <ScrollView contentContainerStyle={styles.container}>
             <Text style={styles.title}>Add New Event</Text>
 
-            {/* event name */}
             <Text style={styles.label}>Event Name</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Event Name"
-                value={eventName}
-                onChangeText={setEventName}
-            />
+            <TextInput style={styles.input} placeholder="Event Name" value={eventName} onChangeText={setEventName} />
 
-            {/* event description */}
             <Text style={styles.label}>Description</Text>
             <TextInput
                 style={[styles.input, styles.textArea]}
@@ -140,15 +128,11 @@ export default function AddEvent() {
                 onChangeText={setEventDescription}
             />
 
-            {/* event image */}
             <Text style={styles.label}>Event Image</Text>
-            <TouchableOpacity>
-                <Text style={styles.imagePickerButtonText} onPress={eventImgOptions}>
-                    {image ? "Change Image" : "Select Image"}
-                </Text>
+            <TouchableOpacity onPress={eventImgOptions}>
+                <Text style={styles.imagePickerButtonText}>{image ? "Change Image" : "Select Image"}</Text>
             </TouchableOpacity>
-            
-            {/* display image */}
+
             {image && (
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: image }} style={styles.selectedImage} />
@@ -158,7 +142,6 @@ export default function AddEvent() {
                 </View>
             )}
 
-            {/* event category */}
             <Text style={styles.label}>Event Category</Text>
             <View style={styles.pickercontainer}>
                 <Picker
@@ -167,7 +150,7 @@ export default function AddEvent() {
                     selectedValue={eventCategory}
                     onValueChange={setEventCategory}
                 >
-                    <Picker.Item label="Select" value="" />
+                    <Picker.Item label="Select" value="" enabled={false} />
                     <Picker.Item label="Conference" value="conference" />
                     <Picker.Item label="Workshop" value="workshop" />
                     <Picker.Item label="Seminar" value="seminar" />
@@ -176,34 +159,21 @@ export default function AddEvent() {
                 </Picker>
             </View>
 
-            {/* event time */}
             <Text style={styles.label}>Time</Text>
-            <TimePicker 
-                value={eventTime}
-                onTimeChange={handleTimeChange}
-                placeholder="Select Event Time"
-            />
+            <TimePicker value={eventTime} onTimeChange={handleTimeChange} placeholder="Select Event Time" />
 
-            {/* event date */}
             <Text style={styles.label}>Date</Text>
-            <DatePicker 
+            <DatePicker
                 value={eventDate}
                 onDateChange={handleDateChange}
                 placeholder="Select Event Date"
-                minimumDate={new Date()} 
+                minimumDate={new Date()}
                 mode="date"
             />
 
-            {/* event location */}
             <Text style={styles.label}>Location</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Event Location"
-                value={eventLocation}
-                onChangeText={setEventLocation}
-            />
+            <TextInput style={styles.input} placeholder="Event Location" value={eventLocation} onChangeText={setEventLocation} />
 
-            {/* event number of attendees */}
             <Text style={styles.label}>Attendees</Text>
             <TextInput
                 style={styles.input}
@@ -213,7 +183,6 @@ export default function AddEvent() {
                 onChangeText={setAttendees}
             />
 
-            {/* save button */}
             <TouchableOpacity style={styles.button} onPress={handleSaveEvent}>
                 <Text style={styles.buttonTxt}>Save</Text>
             </TouchableOpacity>
@@ -226,7 +195,7 @@ const { width } = Dimensions.get("window");
 const styles = StyleSheet.create({
     container: {
         paddingVertical: 30,
-        paddingHorizontal: width * 0.06, 
+        paddingHorizontal: width * 0.06,
         backgroundColor: "#fff",
         flexGrow: 1,
     },
@@ -255,11 +224,7 @@ const styles = StyleSheet.create({
     },
     textArea: {
         height: 100,
-        textAlignVertical: "top", 
-    },
-    buttonContainer: {
-        marginTop: 30,
-        width: "100%",
+        textAlignVertical: "top",
     },
     button: {
         width: "100%",
@@ -287,17 +252,6 @@ const styles = StyleSheet.create({
     picker: {
         height: 50,
         width: "100%",
-        paddingVertical: 0,
-    },
-     imagePickerButton: {
-        backgroundColor: "#f0f0f0",
-        borderWidth: 1,
-        borderColor: "#d1d5db",
-        borderRadius: 8,
-        paddingVertical: 15,
-        paddingHorizontal: 12,
-        alignItems: "center",
-        justifyContent: "center",
     },
     imagePickerButtonText: {
         fontSize: 16,

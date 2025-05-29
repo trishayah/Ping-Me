@@ -40,16 +40,19 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
         const fetchedEvents = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          console.log("Event data:", data); // Debug log
           fetchedEvents.push({
             id: doc.id,
-            eventName: data.name,
-            eventDescription: data.description,
-            eventType: data.category,
-            eventLocation: data.location,
-            eventDate: data.date,
-            eventTime: data.time,
+            eventName: data.name || "",
+            eventDescription: data.description || "",
+            eventType: data.category || "general", // Provide default value
+            eventLocation: data.location || "",
+            eventDate: data.date || "",
+            eventTime: data.time || "",
             eventAttendees: data.attendees ? [data.attendees] : [],
             eventImage: data.image ? { uri: data.image } : null,
+            eventAddress: data.address || "",
+            eventAgenda: data.agenda || null,
             // add other fields as needed
           });
         });
@@ -62,22 +65,28 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
   }, []);
 
   const filteredEvents = events.filter((event) => {
+    // Add null checks for event properties
+    const eventName = event.eventName || "";
+    const eventDescription = event.eventDescription || "";
+    const eventType = event.eventType || "";
+
     const matchesSearch =
-      event.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.eventDescription.toLowerCase().includes(searchTerm.toLowerCase());
+      eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      eventDescription.toLowerCase().includes(searchTerm.toLowerCase());
 
     if (filter === "all") return matchesSearch;
     if (filter === "hackathons")
-      return event.eventType === "hackathon" && matchesSearch;
+      return eventType.toLowerCase() === "hackathon" && matchesSearch;
     if (filter === "workshops")
-      return event.eventType === "workshop" && matchesSearch;
+      return eventType.toLowerCase() === "workshop" && matchesSearch;
     if (filter === "seminars")
       return (
-        (event.eventType === "seminar" || event.eventType === "webinar") &&
+        (eventType.toLowerCase() === "seminar" ||
+          eventType.toLowerCase() === "webinar") &&
         matchesSearch
       );
     if (filter === "conferences")
-      return event.eventType === "conference" && matchesSearch;
+      return eventType.toLowerCase() === "conference" && matchesSearch;
     return matchesSearch;
   });
 
@@ -90,6 +99,7 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return "Date TBD";
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
       month: "short",
@@ -99,6 +109,7 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
   };
 
   const formatDetailedDate = (dateString) => {
+    if (!dateString) return "Date TBD";
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
       weekday: "long",
@@ -109,7 +120,8 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
   };
 
   const getEventTypeBadgeStyle = (type) => {
-    switch (type.toLowerCase()) {
+    const eventType = (type || "").toLowerCase();
+    switch (eventType) {
       case "hackathon":
         return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
       case "workshop":
@@ -133,6 +145,7 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
         isAttending={rsvpedEvents.includes(selectedEvent.id)}
         userType={userType}
         formatDate={formatDetailedDate}
+        getEventTypeBadgeStyle={getEventTypeBadgeStyle}
       />
     );
   }
@@ -140,16 +153,25 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Search width={18} height={18} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search events..."
-            value={searchTerm}
-            onChangeText={setSearchTerm}
-          />
+        <View style={styles.searchRow}>
+          <View style={styles.searchInputContainer}>
+            <Search width={18} height={18} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search events..."
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+            />
+          </View>
+          {userType === "organizer" && (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => navigation.navigate("AddEvent")}
+            >
+              <Plus width={22} height={22} style={styles.addIcon} />
+            </TouchableOpacity>
+          )}
         </View>
-
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -266,15 +288,6 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
           </Text>
         </View>
       )}
-
-      {userType !== "student" && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => navigation.navigate("AddEvent")}
-        >
-          <Plus width={24} height={24} style={styles.fabIcon} />
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 };
@@ -288,6 +301,9 @@ const EventCard = ({
 }) => {
   const badgeStyle = getEventTypeBadgeStyle(event.eventType);
 
+  // Debug log for image
+  console.log("Event image:", event.eventImage);
+
   return (
     <TouchableOpacity style={styles.cardContainer} onPress={onPress}>
       {event.eventImage && (
@@ -295,6 +311,8 @@ const EventCard = ({
           source={event.eventImage}
           style={styles.cardImage}
           resizeMode="cover"
+          onError={(error) => console.log("Image load error:", error)}
+          onLoad={() => console.log("Image loaded successfully")}
         />
       )}
 
@@ -307,7 +325,7 @@ const EventCard = ({
             ]}
           >
             <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
-              {event.eventType}
+              {event.eventType || "General"}
             </Text>
           </View>
           {isAttending && (
@@ -317,7 +335,9 @@ const EventCard = ({
           )}
         </View>
 
-        <Text style={styles.cardTitle}>{event.eventName}</Text>
+        <Text style={styles.cardTitle}>
+          {event.eventName || "Untitled Event"}
+        </Text>
 
         <View style={styles.cardDetailRow}>
           <Calendar width={14} height={14} style={styles.detailIcon} />
@@ -329,16 +349,20 @@ const EventCard = ({
             height={14}
             style={[styles.detailIcon, styles.clockIcon]}
           />
-          <Text style={styles.cardDetailText}>{event.eventTime}</Text>
+          <Text style={styles.cardDetailText}>
+            {event.eventTime || "Time TBD"}
+          </Text>
         </View>
 
         <View style={styles.cardDetailRow}>
           <MapPin width={14} height={14} style={styles.detailIcon} />
-          <Text style={styles.cardDetailText}>{event.eventLocation}</Text>
+          <Text style={styles.cardDetailText}>
+            {event.eventLocation || "Location TBD"}
+          </Text>
         </View>
 
         <Text style={styles.cardDescription} numberOfLines={2}>
-          {event.eventDescription}
+          {event.eventDescription || "No description available"}
         </Text>
 
         <View style={styles.cardDetailRow}>
@@ -359,6 +383,7 @@ const EventDetails = ({
   isAttending,
   userType,
   formatDate,
+  getEventTypeBadgeStyle,
 }) => {
   const badgeStyle = getEventTypeBadgeStyle(event.eventType);
 
@@ -370,6 +395,8 @@ const EventDetails = ({
             source={event.eventImage}
             style={styles.detailsImage}
             resizeMode="cover"
+            onError={(error) => console.log("Details image load error:", error)}
+            onLoad={() => console.log("Details image loaded successfully")}
           />
         )}
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -384,10 +411,12 @@ const EventDetails = ({
             ]}
           >
             <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
-              {event.eventType}
+              {event.eventType || "General"}
             </Text>
           </View>
-          <Text style={styles.detailsTitle}>{event.eventName}</Text>
+          <Text style={styles.detailsTitle}>
+            {event.eventName || "Untitled Event"}
+          </Text>
         </View>
       </View>
 
@@ -399,7 +428,6 @@ const EventDetails = ({
               {event.eventAttendees ? event.eventAttendees.length : 0} attending
             </Text>
           </View>
-
           {userType === "student" ? (
             <TouchableOpacity
               style={[
@@ -417,12 +445,12 @@ const EventDetails = ({
                 {isAttending ? "Attending" : "RSVP"}
               </Text>
             </TouchableOpacity>
-          ) : (
+          ) : userType === "organizer" ? (
             <TouchableOpacity style={styles.editButton}>
               <Edit width={16} height={16} style={styles.editIcon} />
               <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.detailsSection}>
@@ -436,7 +464,9 @@ const EventDetails = ({
               <Text style={styles.detailPrimary}>
                 {formatDate(event.eventDate)}
               </Text>
-              <Text style={styles.detailSecondary}>{event.eventTime}</Text>
+              <Text style={styles.detailSecondary}>
+                {event.eventTime || "Time TBD"}
+              </Text>
             </View>
           </View>
 
@@ -447,7 +477,9 @@ const EventDetails = ({
               style={[styles.actionIcon, styles.blueIcon]}
             />
             <View>
-              <Text style={styles.detailPrimary}>{event.eventLocation}</Text>
+              <Text style={styles.detailPrimary}>
+                {event.eventLocation || "Location TBD"}
+              </Text>
               {event.eventAddress && (
                 <Text style={styles.detailSecondary}>{event.eventAddress}</Text>
               )}
@@ -457,17 +489,21 @@ const EventDetails = ({
 
         <View style={styles.detailsSection}>
           <Text style={styles.sectionTitle}>About this event</Text>
-          <Text style={styles.sectionText}>{event.eventDescription}</Text>
+          <Text style={styles.sectionText}>
+            {event.eventDescription || "No description available"}
+          </Text>
         </View>
 
-        {event.eventAgenda && (
+        {event.eventAgenda && event.eventAgenda.length > 0 && (
           <View style={styles.detailsSection}>
             <Text style={styles.sectionTitle}>Agenda</Text>
             <View style={styles.agendaContainer}>
               {event.eventAgenda.map((item, index) => (
                 <View key={index} style={styles.agendaItem}>
-                  <Text style={styles.agendaTime}>{item.time}:</Text>
-                  <Text style={styles.agendaActivity}>{item.activity}</Text>
+                  <Text style={styles.agendaTime}>{item.time || "TBD"}:</Text>
+                  <Text style={styles.agendaActivity}>
+                    {item.activity || "Activity"}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -487,6 +523,11 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 8,
   },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   searchInputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -495,7 +536,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 12,
-    marginBottom: 12,
+    flex: 1,
   },
   searchIcon: {
     color: "#94a3b8",
@@ -505,6 +546,22 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     color: "#334155",
+  },
+  addButton: {
+    marginLeft: 10,
+    backgroundColor: "#1e40af", // More vibrant blue
+    borderRadius: 8,
+    padding: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+  },
+  addIcon: {
+    color: "#fff", // White icon for contrast
   },
   filterContainer: {
     marginBottom: 8,
@@ -724,18 +781,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2563eb",
-    backgroundColor: "white",
+    borderColor: "#22c55e", // Green border
+    backgroundColor: "#fff",
   },
   rsvpButtonActive: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#22c55e", // Green when active
   },
   rsvpButtonText: {
-    color: "#2563eb",
+    color: "#22c55e",
     fontWeight: "500",
   },
   rsvpButtonTextActive: {
-    color: "white",
+    color: "#fff",
   },
   editButton: {
     flexDirection: "row",
@@ -744,15 +801,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#64748b",
-    backgroundColor: "white",
+    borderColor: "#1e40af", // Match addButton color
+    backgroundColor: "#1e40af", // Vibrant blue
+    elevation: 2,
   },
   editIcon: {
-    color: "#64748b",
+    color: "#fff",
     marginRight: 8,
   },
   editButtonText: {
-    color: "#334155",
+    color: "#fff",
     fontWeight: "500",
   },
   detailsSection: {
@@ -800,25 +858,6 @@ const styles = StyleSheet.create({
   agendaActivity: {
     color: "#334155",
     flex: 1,
-  },
-  fab: {
-    position: "absolute",
-    right: 16,
-    bottom: 16,
-    backgroundColor: "#2563eb",
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  fabIcon: {
-    color: "white",
   },
 });
 

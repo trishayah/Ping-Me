@@ -307,12 +307,18 @@ export default function RootLayout() {
     setAppState("login");
   };
 
+  // Add this handler for successful signup
+  const handleSignupSuccess = () => {
+    setAppState("authenticated");
+  };
+
   if (appState === "loading") {
     return <SplashScreen />;
   }
 
   if (appState === "signup") {
-    return <SignUpPage onBack={handleBackToLogin} />;
+    // Pass the success handler to SignUpPage
+    return <SignUpPage onBack={handleBackToLogin} onSignupSuccess={handleSignupSuccess} />;
   }
 
   if (appState === "login") {
