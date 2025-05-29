@@ -23,14 +23,21 @@ const EventsStack = createNativeStackNavigator();
 
 function EventsStackScreen({ userType }: { userType: "student" | "organizer" }) {
   return (
-    <EventsStack.Navigator>
-      <EventsStack.Screen name="EventsMain" options={{ headerShown: false }}>
+    <EventsStack.Navigator
+      screenOptions={{
+        headerShown: false, // Hide all headers in this stack
+      }}
+    >
+      <EventsStack.Screen
+        name="EventsMain"
+        options={{ headerShown: false, title: "" }} // Hide header and title
+      >
         {(props) => <EventsPage {...props} userType={userType} />}
       </EventsStack.Screen>
       <EventsStack.Screen
         name="AddEvent"
         component={AddEvent}
-        options={{ title: "Add Event" }}
+        options={{ headerTitle: "" }} // Hide title for AddEvent as well
       />
     </EventsStack.Navigator>
   );
@@ -49,6 +56,7 @@ function AuthenticatedTabs({
   };
   onLogout: () => void;
 }) {
+  const isOrganizer = userData.userType === "organizer";
   return (
     <Tab.Navigator
       screenOptions={{
@@ -78,32 +86,36 @@ function AuthenticatedTabs({
           ),
         }}
       />
-      <Tab.Screen
-        name="Transactions"
-        children={(props) => <Transactions />}
-        initialParams={{ name: "Transactions" }}
-        options={{
-          headerTitle: () => <HeaderTitle text="Transaction" />,
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons
-              name="published-with-changes"
-              color="#000"
-              size={24}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Reports"
-        children={(props) => <Reports />}
-        initialParams={{ name: "Reports" }}
-        options={{
-          headerTitle: () => <HeaderTitle text="Reports" />,
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="journal" color="#000" size={24} />
-          ),
-        }}
-      />
+      {isOrganizer && (
+        <Tab.Screen
+          name="Transactions"
+          children={(props) => <Transactions {...props} userData={userData} />}
+          initialParams={{ name: "Transactions" }}
+          options={{
+            headerTitle: () => <HeaderTitle text="Transaction" />,
+            tabBarIcon: ({ color }) => (
+              <MaterialIcons
+                name="published-with-changes"
+                color="#000"
+                size={24}
+              />
+            ),
+          }}
+        />
+      )}
+      {isOrganizer && (
+        <Tab.Screen
+          name="Reports"
+          children={(props) => <Reports {...props} userData={userData} />}
+          initialParams={{ name: "Reports" }}
+          options={{
+            headerTitle: () => <HeaderTitle text="Reports" />,
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="journal" color="#000" size={24} />
+            ),
+          }}
+        />
+      )}
       <Tab.Screen
         name="Profile"
         children={(props) => (

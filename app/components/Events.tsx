@@ -9,6 +9,7 @@ import {
   Image,
   StyleSheet,
   SafeAreaView,
+  Alert,
 } from "react-native";
 import {
   Search,
@@ -21,7 +22,15 @@ import {
   Edit,
   Plus,
 } from "react-native-feather";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+} from "firebase/firestore";
 import { firebaseApp } from "../../firebaseConfig";
 
 const db = getFirestore(firebaseApp);
@@ -39,8 +48,6 @@ type EventData = {
   eventTime: string;
   eventAttendees?: any[];
   eventImage?: { uri: string } | null;
-  eventAddress?: string;
-  eventAgenda?: { time: string; activity: string }[];
 };
 
 const Events = ({
@@ -79,8 +86,6 @@ const Events = ({
             eventTime: data.time || "",
             eventAttendees: data.attendees ? [data.attendees] : [],
             eventImage: data.image ? { uri: data.image } : null,
-            eventAddress: data.address || data.eventAddress || "",
-            eventAgenda: data.agenda || data.eventAgenda || [],
           });
         });
         setEvents(fetchedEvents);
@@ -91,41 +96,67 @@ const Events = ({
     fetchEvents();
   }, []);
 
-  const filteredEvents = events.filter((event) => {
-    // Add null checks for event properties
-    const eventName = event.eventName || "";
-    const eventDescription = event.eventDescription || "";
-    const eventType = event.eventType || "";
-
-    const matchesSearch =
-      eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      eventDescription.toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (filter === "all") return matchesSearch;
-    if (filter === "hackathons")
-      return eventType.toLowerCase() === "hackathon" && matchesSearch;
-    if (filter === "workshops")
-      return eventType.toLowerCase() === "workshop" && matchesSearch;
-    if (filter === "seminars")
-      return (
-        (eventType.toLowerCase() === "seminar" ||
-          eventType.toLowerCase() === "webinar") &&
-        matchesSearch
-      );
-    if (filter === "conferences")
-      return eventType.toLowerCase() === "conference" && matchesSearch;
-    return matchesSearch;
-  });
+  // Removed duplicate filteredEvents declaration to fix redeclaration error.
 
   interface HandleRSVP {
     (eventId: string): void;
   }
 
-  const handleRSVP: HandleRSVP = (eventId) => {
+  // Get user info from navigation params, props, or context
+  const userEmail =
+    navigation?.getParam?.("userEmail") ||
+    navigation?.userEmail ||
+    navigation?.props?.userData?.email ||
+    navigation?.getState?.()?.routes?.[0]?.params?.userData?.email ||
+    "";
+  const userName =
+    navigation?.getParam?.("userName") ||
+    navigation?.userName ||
+    navigation?.props?.userData?.firstName ||
+    navigation?.getState?.()?.routes?.[0]?.params?.userData?.firstName ||
+    "";
+
+  const handleRSVP: HandleRSVP = async (eventId) => {
     if (rsvpedEvents.includes(eventId)) {
       setRsvpedEvents(rsvpedEvents.filter((id) => id !== eventId));
+      // Optionally: remove RSVP from Firestore here if needed
     } else {
       setRsvpedEvents([...rsvpedEvents, eventId]);
+      Alert.alert(
+        "Success",
+        "You have successfully registered for this event!"
+      );
+
+      // Store RSVP in Firestore (registrations collection)
+      try {
+        const event = events.find((ev) => ev.id === eventId);
+        if (!event) return;
+
+        await addDoc(collection(db, "registrations"), {
+          eventId: event.id,
+          eventName: event.eventName,
+          attendeeEmail: userEmail,
+          attendeeName: userName,
+          registrationDate: new Date().toISOString(),
+          status: "confirmed",
+        });
+
+        // Optionally update event's attendees count in Firestore
+        const eventDocRef = doc(db, "events", event.id);
+        let newAttendees = 1;
+        if (Array.isArray(event.eventAttendees)) {
+          newAttendees = event.eventAttendees.length + 1;
+        } else if (typeof event.eventAttendees === "number") {
+          newAttendees = event.eventAttendees + 1;
+        }
+        await updateDoc(eventDocRef, {
+          attendees: newAttendees,
+        });
+
+        refreshEvents && refreshEvents();
+      } catch (e) {
+        console.error("Failed to save RSVP to Firestore:", e);
+      }
     }
   };
 
@@ -189,6 +220,397 @@ const Events = ({
     }
   };
 
+  const EventDetails = ({
+    event,
+    onBack,
+    onRSVP,
+    isAttending,
+    userType,
+    formatDate,
+    getEventTypeBadgeStyle,
+    refreshEvents, // new prop
+  }) => {
+    // Use the getEventTypeBadgeStyle function with null check
+    const getEventTypeBadgeStyleSafe = (type: string) => {
+      if (!type) {
+        return { backgroundColor: "#e2e8f0", color: "#334155" };
+      }
+
+      switch (type.toLowerCase()) {
+        case "hackathon":
+          return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
+        case "workshop":
+          return { backgroundColor: "#dcfce7", color: "#166534" };
+        case "seminar":
+        case "webinar":
+          return { backgroundColor: "#dbeafe", color: "#1e40af" };
+        case "conference":
+          return { backgroundColor: "#fef9c3", color: "#854d0e" };
+        default:
+          return { backgroundColor: "#e2e8f0", color: "#334155" };
+      }
+    };
+
+    const badgeStyle = getEventTypeBadgeStyleSafe(event.eventType);
+
+    const [editMode, setEditMode] = useState(false);
+    const [editData, setEditData] = useState({
+      eventName: event.eventName,
+      eventDescription: event.eventDescription,
+      eventDate: event.eventDate,
+      eventTime: event.eventTime,
+      eventLocation: event.eventLocation,
+      eventType: event.eventType,
+    });
+    const [loading, setLoading] = useState(false);
+
+    const handleEditChange = (field, value) => {
+      setEditData({ ...editData, [field]: value });
+    };
+
+    const handleSaveEdit = async () => {
+      setLoading(true);
+      try {
+        const eventRef = doc(db, "events", event.id);
+        await updateDoc(eventRef, {
+          name: editData.eventName,
+          description: editData.eventDescription,
+          date: editData.eventDate,
+          time: editData.eventTime,
+          location: editData.eventLocation,
+          category: editData.eventType,
+        });
+        setEditMode(false);
+        if (refreshEvents) refreshEvents();
+      } catch (e) {
+        alert("Failed to update event.");
+      }
+      setLoading(false);
+    };
+
+    const handleDelete = async () => {
+      Alert.alert(
+        "Delete Event",
+        "Are you sure you want to delete this event?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              setLoading(true);
+              try {
+                await deleteDoc(doc(db, "events", event.id));
+                if (refreshEvents) refreshEvents();
+                onBack();
+              } catch (e) {
+                alert("Failed to delete event.");
+              }
+              setLoading(false);
+            },
+          },
+        ]
+      );
+    };
+
+    const detailsContent = (
+      <View style={styles.detailsContent}>
+        <View style={styles.detailsActionRow}>
+          <View style={styles.attendingContainer}>
+            <Users width={18} height={18} style={styles.actionIcon} />
+            <Text style={styles.attendingCount}>
+              {event.eventAttendees ? event.eventAttendees.length : 0} attending
+            </Text>
+          </View>
+          {userType === "student" ? (
+            <TouchableOpacity
+              style={[
+                styles.rsvpButton,
+                isAttending && styles.rsvpButtonActive,
+              ]}
+              onPress={() => onRSVP(event.id)}
+            >
+              <Text
+                style={[
+                  styles.rsvpButtonText,
+                  isAttending && styles.rsvpButtonTextActive,
+                ]}
+              >
+                {isAttending ? "Attending" : "RSVP"}
+              </Text>
+            </TouchableOpacity>
+          ) : userType === "organizer" ? (
+            <View style={{ flexDirection: "row" }}>
+              {editMode ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.editButton, { marginRight: 8 }]}
+                    onPress={handleSaveEdit}
+                    disabled={loading}
+                  >
+                    <Text style={styles.editButtonText}>
+                      {loading ? "Saving..." : "Save"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.editButton,
+                      { backgroundColor: "#64748b", borderColor: "#64748b" },
+                    ]}
+                    onPress={() => setEditMode(false)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.editButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => setEditMode(true)}
+                  >
+                    <Edit width={16} height={16} style={styles.editIcon} />
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.editButton,
+                      {
+                        backgroundColor: "#dc2626",
+                        borderColor: "#dc2626",
+                        marginLeft: 8,
+                      },
+                    ]}
+                    onPress={handleDelete}
+                  >
+                    <Text style={styles.editButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.detailsSection}>
+          <View style={styles.detailRow}>
+            <Calendar
+              width={18}
+              height={18}
+              style={styles.actionIcon}
+              color="#2563eb"
+            />
+            <View>
+              {editMode ? (
+                <>
+                  <TextInput
+                    style={styles.detailPrimary}
+                    value={editData.eventDate}
+                    onChangeText={(v) => handleEditChange("eventDate", v)}
+                    editable={!loading}
+                    placeholder="YYYY-MM-DD"
+                  />
+                  <TextInput
+                    style={styles.detailSecondary}
+                    value={editData.eventTime}
+                    onChangeText={(v) => handleEditChange("eventTime", v)}
+                    editable={!loading}
+                    placeholder="Time"
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.detailPrimary}>
+                    {formatDate(event.eventDate)}
+                  </Text>
+                  <Text style={styles.detailSecondary}>
+                    {event.eventTime || "Time TBD"}
+                  </Text>
+                </>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.detailRow}>
+            <MapPin
+              width={18}
+              height={18}
+              style={styles.actionIcon}
+              color="#2563eb"
+            />
+            <View>
+              {editMode ? (
+                <TextInput
+                  style={styles.detailPrimary}
+                  value={editData.eventLocation}
+                  onChangeText={(v) => handleEditChange("eventLocation", v)}
+                  editable={!loading}
+                  placeholder="Location"
+                />
+              ) : (
+                <Text style={styles.detailPrimary}>
+                  {event.eventLocation || "Location TBD"}
+                </Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={[styles.detailPrimary, { marginRight: 8 }]}>
+              Type:
+            </Text>
+            {editMode ? (
+              <TextInput
+                style={styles.detailPrimary}
+                value={editData.eventType}
+                onChangeText={(v) => handleEditChange("eventType", v)}
+                editable={!loading}
+                placeholder="Type"
+              />
+            ) : (
+              <Text style={styles.detailPrimary}>
+                {event.eventType || "General"}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.detailsSection}>
+          <Text style={styles.sectionTitle}>About this event</Text>
+          {editMode ? (
+            <TextInput
+              style={[
+                styles.sectionText,
+                {
+                  minHeight: 60,
+                  backgroundColor: "#f1f5f9",
+                  borderRadius: 4,
+                  padding: 8,
+                },
+              ]}
+              value={editData.eventDescription}
+              onChangeText={(v) => handleEditChange("eventDescription", v)}
+              editable={!loading}
+              multiline
+            />
+          ) : (
+            <Text style={styles.sectionText}>
+              {event.eventDescription || "No description available"}
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+
+    return (
+      <ScrollView style={styles.detailsContainer}>
+        <View style={styles.detailsHeader}>
+          {event.eventImage && (
+            <Image
+              source={event.eventImage}
+              style={styles.detailsImage}
+              resizeMode="cover"
+              onError={(error) =>
+                console.log("Details image load error:", error)
+              }
+              onLoad={() => console.log("Details image loaded successfully")}
+            />
+          )}
+          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <ArrowLeft width={20} height={20} color={styles.backIcon.color} />
+          </TouchableOpacity>
+          <View style={styles.detailsHeaderContent}>
+            <View
+              style={[
+                styles.eventTypeBadge,
+                styles.detailsBadge,
+                { backgroundColor: badgeStyle.backgroundColor },
+              ]}
+            >
+              <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
+                {event.eventType || "General"}
+              </Text>
+            </View>
+            {editMode ? (
+              <TextInput
+                style={[
+                  styles.detailsTitle,
+                  {
+                    color: "white",
+                    backgroundColor: "#2226",
+                    borderRadius: 4,
+                    padding: 4,
+                  },
+                ]}
+                value={editData.eventName}
+                onChangeText={(v) => handleEditChange("eventName", v)}
+                editable={!loading}
+              />
+            ) : (
+              <Text style={styles.detailsTitle}>
+                {event.eventName || "Untitled Event"}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {detailsContent}
+      </ScrollView>
+    );
+  };
+
+  const refreshEvents = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "events"));
+      const fetchedEvents: EventData[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        fetchedEvents.push({
+          id: doc.id,
+          eventName: data.name || "",
+          eventDescription: data.description || "",
+          eventType: data.category || "general",
+          eventLocation: data.location || "",
+          eventDate: data.date || "",
+          eventTime: data.time || "",
+          eventAttendees: data.attendees ? [data.attendees] : [],
+          eventImage: data.image ? { uri: data.image } : null,
+        });
+      });
+      setEvents(fetchedEvents);
+    } catch (error) {
+      console.error("Error fetching events:", error);
+    }
+  };
+
+  useEffect(() => {
+    refreshEvents();
+  }, []);
+
+  const filteredEvents = events.filter((event) => {
+    // Add null checks for event properties
+    const eventName = event.eventName || "";
+    const eventDescription = event.eventDescription || "";
+    const eventType = event.eventType || "";
+
+    const matchesSearch =
+      eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      eventDescription.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (filter === "all") return matchesSearch;
+    if (filter === "hackathons")
+      return eventType.toLowerCase() === "hackathon" && matchesSearch;
+    if (filter === "workshops")
+      return eventType.toLowerCase() === "workshop" && matchesSearch;
+    if (filter === "seminars")
+      return (
+        (eventType.toLowerCase() === "seminar" ||
+          eventType.toLowerCase() === "webinar") &&
+        matchesSearch
+      );
+    if (filter === "conferences")
+      return eventType.toLowerCase() === "conference" && matchesSearch;
+    return matchesSearch;
+  });
+
   if (selectedEvent) {
     return (
       <EventDetails
@@ -198,6 +620,8 @@ const Events = ({
         isAttending={rsvpedEvents.includes(selectedEvent.id)}
         userType={userType}
         formatDate={formatDetailedDate}
+        getEventTypeBadgeStyle={getEventTypeBadgeStyle}
+        refreshEvents={refreshEvents}
       />
     );
   }
@@ -220,7 +644,7 @@ const Events = ({
               style={styles.addButton}
               onPress={() => {
                 console.log("Add button pressed");
-                navigation.navigate('AddEvent');
+                navigation.navigate("AddEvent");
               }}
             >
               <Plus width={22} height={22} color={styles.addIcon.color} />
@@ -440,175 +864,6 @@ const EventCard: React.FC<EventCardProps> = ({
         </View>
       </View>
     </TouchableOpacity>
-  );
-};
-
-type EventDetailsProps = {
-  event: EventData;
-  onBack: () => void;
-  onRSVP: (eventId: string) => void;
-  isAttending: boolean;
-  userType: string;
-  formatDate: (dateString: string) => string;
-};
-
-const EventDetails: React.FC<EventDetailsProps> = ({
-  event,
-  onBack,
-  onRSVP,
-  isAttending,
-  userType,
-  formatDate,
-}) => {
-  // Use the getEventTypeBadgeStyle function with null check
-  const getEventTypeBadgeStyleSafe = (type: string) => {
-    if (!type) {
-      return { backgroundColor: "#e2e8f0", color: "#334155" };
-    }
-
-    switch (type.toLowerCase()) {
-      case "hackathon":
-        return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
-      case "workshop":
-        return { backgroundColor: "#dcfce7", color: "#166534" };
-      case "seminar":
-      case "webinar":
-        return { backgroundColor: "#dbeafe", color: "#1e40af" };
-      case "conference":
-        return { backgroundColor: "#fef9c3", color: "#854d0e" };
-      default:
-        return { backgroundColor: "#e2e8f0", color: "#334155" };
-    }
-  };
-
-  const badgeStyle = getEventTypeBadgeStyleSafe(event.eventType);
-
-  return (
-    <ScrollView style={styles.detailsContainer}>
-      <View style={styles.detailsHeader}>
-        {event.eventImage && (
-          <Image
-            source={event.eventImage}
-            style={styles.detailsImage}
-            resizeMode="cover"
-            onError={(error) => console.log("Details image load error:", error)}
-            onLoad={() => console.log("Details image loaded successfully")}
-          />
-        )}
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <ArrowLeft width={20} height={20} color={styles.backIcon.color} />
-        </TouchableOpacity>
-        <View style={styles.detailsHeaderContent}>
-          <View
-            style={[
-              styles.eventTypeBadge,
-              styles.detailsBadge,
-              { backgroundColor: badgeStyle.backgroundColor },
-            ]}
-          >
-            <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
-              {event.eventType || "General"}
-            </Text>
-          </View>
-          <Text style={styles.detailsTitle}>
-            {event.eventName || "Untitled Event"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.detailsContent}>
-        <View style={styles.detailsActionRow}>
-          <View style={styles.attendingContainer}>
-            <Users width={18} height={18} style={styles.actionIcon} />
-            <Text style={styles.attendingCount}>
-              {event.eventAttendees ? event.eventAttendees.length : 0} attending
-            </Text>
-          </View>
-          {userType === "student" ? (
-            <TouchableOpacity
-              style={[
-                styles.rsvpButton,
-                isAttending && styles.rsvpButtonActive,
-              ]}
-              onPress={() => onRSVP(event.id)}
-            >
-              <Text
-                style={[
-                  styles.rsvpButtonText,
-                  isAttending && styles.rsvpButtonTextActive,
-                ]}
-              >
-                {isAttending ? "Attending" : "RSVP"}
-              </Text>
-            </TouchableOpacity>
-          ) : userType === "organizer" ? (
-            <TouchableOpacity style={styles.editButton}>
-              <Edit width={16} height={16} style={styles.editIcon} />
-              <Text style={styles.editButtonText}>Edit</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        <View style={styles.detailsSection}>
-          <View style={styles.detailRow}>
-            <Calendar
-              width={18}
-              height={18}
-              style={styles.actionIcon}
-              color="#2563eb"
-            />
-            <View>
-              <Text style={styles.detailPrimary}>
-                {formatDate(event.eventDate)}
-              </Text>
-              <Text style={styles.detailSecondary}>
-                {event.eventTime || "Time TBD"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.detailRow}>
-            <MapPin
-              width={18}
-              height={18}
-              style={styles.actionIcon}
-              color="#2563eb"
-            />
-            <View>
-              <Text style={styles.detailPrimary}>
-                {event.eventLocation || "Location TBD"}
-              </Text>
-              {event.eventAddress && (
-                <Text style={styles.detailSecondary}>{event.eventAddress}</Text>
-              )}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionTitle}>About this event</Text>
-          <Text style={styles.sectionText}>
-            {event.eventDescription || "No description available"}
-          </Text>
-        </View>
-
-        {event.eventAgenda && event.eventAgenda.length > 0 && (
-          <View style={styles.detailsSection}>
-            <Text style={styles.sectionTitle}>Agenda</Text>
-            <View style={styles.agendaContainer}>
-              {event.eventAgenda.map((item : any, index : any) => (
-                <View key={index} style={styles.agendaItem}>
-                  <Text style={styles.agendaTime}>{item.time || "TBD"}:</Text>
-                  <Text style={styles.agendaActivity}>
-                    {item.activity || "Activity"}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-      </View>
-    </ScrollView>
   );
 };
 
@@ -937,25 +1192,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#334155",
     lineHeight: 22,
-  },
-  agendaContainer: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 8,
-    padding: 12,
-  },
-  agendaItem: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  agendaTime: {
-    fontWeight: "500",
-    color: "#1e293b",
-    marginRight: 8,
-    minWidth: 60,
-  },
-  agendaActivity: {
-    color: "#334155",
-    flex: 1,
   },
 });
 

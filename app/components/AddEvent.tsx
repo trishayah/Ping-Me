@@ -16,10 +16,11 @@ import TimePicker from "@/components/time-picker";
 import DatePicker from "@/components/date-picker";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 import { firebaseApp } from "../../firebaseConfig";
+import { ArrowLeft } from "react-native-feather";
 
 const db = getFirestore(firebaseApp);
 
-export default function AddEvent() {
+export default function AddEvent({ navigation }) {
   const [image, setImage] = useState<string | null>(null);
   const [eventTime, setEventTime] = useState<Date | undefined>(undefined);
   const [eventDate, setEventDate] = useState<Date | undefined>(undefined);
@@ -130,7 +131,16 @@ export default function AddEvent() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Add New Event</Text>
+      {/* Custom Header with Back Button */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          style={styles.headerBackButton}
+          onPress={() => navigation && navigation.goBack && navigation.goBack()}
+        >
+          <ArrowLeft width={24} height={24} color="#6200ee" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Add New Event</Text>
+      </View>
 
       <Text style={styles.label}>Event Name</Text>
       <TextInput
@@ -235,12 +245,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     flexGrow: 1,
   },
-  title: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 25,
+    marginTop: 10,
+  },
+  headerBackButton: {
+    marginRight: 10,
+    padding: 4,
+    borderRadius: 20,
+  },
+  headerTitle: {
     fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 25,
-    textAlign: "center",
     color: "#6200ee",
+    flex: 1,
+    textAlign: "center",
   },
   label: {
     fontSize: 16,
