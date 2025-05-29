@@ -26,31 +26,57 @@ import { firebaseApp } from "../../firebaseConfig";
 
 const db = getFirestore(firebaseApp);
 
-const Events = ({ userType = "student", initialEvents = [], navigation }) => {
-  const [events, setEvents] = useState([]);
+import { NavigationProp } from "@react-navigation/native";
+
+// Define the EventData type
+type EventData = {
+  id: string;
+  eventName: string;
+  eventDescription: string;
+  eventType: string;
+  eventLocation: string;
+  eventDate: string;
+  eventTime: string;
+  eventAttendees?: any[];
+  eventImage?: { uri: string } | null;
+  eventAddress?: string;
+  eventAgenda?: { time: string; activity: string }[];
+};
+
+const Events = ({
+  userType = "student",
+  initialEvents = [],
+  navigation,
+}: {
+  userType?: string;
+  initialEvents?: any[];
+  navigation: NavigationProp<any>;
+}) => {
+  const [events, setEvents] = useState<EventData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [rsvpedEvents, setRsvpedEvents] = useState([]);
+  const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
+  const [rsvpedEvents, setRsvpedEvents] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "events"));
-        const fetchedEvents = [];
+        const fetchedEvents: EventData[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
           fetchedEvents.push({
             id: doc.id,
-            eventName: data.name,
-            eventDescription: data.description,
-            eventType: data.category,
-            eventLocation: data.location,
-            eventDate: data.date,
-            eventTime: data.time,
+            eventName: data.name || data.eventName || "Untitled Event",
+            eventDescription: data.description || data.eventDescription || "No description available",
+            eventType: data.category || data.eventType || data.type || "general", // Add fallbacks
+            eventLocation: data.location || data.eventLocation || "TBD",
+            eventDate: data.date || data.eventDate || new Date().toISOString(),
+            eventTime: data.time || data.eventTime || "TBD",
             eventAttendees: data.attendees ? [data.attendees] : [],
             eventImage: data.image ? { uri: data.image } : null,
-            // add other fields as needed
+            eventAddress: data.address || data.eventAddress || "",
+            eventAgenda: data.agenda || data.eventAgenda || [],
           });
         });
         setEvents(fetchedEvents);
@@ -81,7 +107,11 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
     return matchesSearch;
   });
 
-  const handleRSVP = (eventId) => {
+  interface HandleRSVP {
+    (eventId: string): void;
+  }
+
+  const handleRSVP: HandleRSVP = (eventId) => {
     if (rsvpedEvents.includes(eventId)) {
       setRsvpedEvents(rsvpedEvents.filter((id) => id !== eventId));
     } else {
@@ -89,7 +119,11 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
     }
   };
 
-  const formatDate = (dateString) => {
+  interface FormatDate {
+    (dateString: string): string;
+  }
+
+  const formatDate: FormatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
       month: "short",
@@ -98,7 +132,11 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
     });
   };
 
-  const formatDetailedDate = (dateString) => {
+  interface FormatDetailedDate {
+    (dateString: string): string;
+  }
+
+  const formatDetailedDate: FormatDetailedDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
       weekday: "long",
@@ -108,7 +146,21 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
     });
   };
 
-  const getEventTypeBadgeStyle = (type) => {
+  interface EventTypeBadgeStyle {
+    backgroundColor: string;
+    color: string;
+  }
+
+  interface GetEventTypeBadgeStyle {
+    (type: string): EventTypeBadgeStyle;
+  }
+
+  const getEventTypeBadgeStyle: GetEventTypeBadgeStyle = (type) => {
+    // Add null/undefined check
+    if (!type) {
+      return { backgroundColor: "#e2e8f0", color: "#334155" };
+    }
+    
     switch (type.toLowerCase()) {
       case "hackathon":
         return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
@@ -272,14 +324,22 @@ const Events = ({ userType = "student", initialEvents = [], navigation }) => {
           style={styles.fab}
           onPress={() => navigation.navigate("AddEvent")}
         >
-          <Plus width={24} height={24} style={styles.fabIcon} />
+          <Plus width={24} height={24} color="white" />
         </TouchableOpacity>
       )}
     </SafeAreaView>
   );
 };
 
-const EventCard = ({
+type EventCardProps = {
+  event: EventData;
+  onPress: () => void;
+  isAttending: boolean;
+  formatDate: (dateString: string) => string;
+  getEventTypeBadgeStyle: (type: string) => { backgroundColor: string; color: string };
+};
+
+const EventCard: React.FC<EventCardProps> = ({
   event,
   onPress,
   isAttending,
@@ -307,7 +367,7 @@ const EventCard = ({
             ]}
           >
             <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
-              {event.eventType}
+              {event.eventType || "General"}
             </Text>
           </View>
           {isAttending && (
@@ -359,8 +419,36 @@ const EventDetails = ({
   isAttending,
   userType,
   formatDate,
+}: {
+  event: EventData;
+  onBack: () => void;
+  onRSVP: (eventId: string) => void;
+  isAttending: boolean;
+  userType: string;
+  formatDate: (dateString: string) => string;
 }) => {
-  const badgeStyle = getEventTypeBadgeStyle(event.eventType);
+  // Use the getEventTypeBadgeStyle function with null check
+  const getEventTypeBadgeStyleSafe = (type: string) => {
+    if (!type) {
+      return { backgroundColor: "#e2e8f0", color: "#334155" };
+    }
+    
+    switch (type.toLowerCase()) {
+      case "hackathon":
+        return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
+      case "workshop":
+        return { backgroundColor: "#dcfce7", color: "#166534" };
+      case "seminar":
+      case "webinar":
+        return { backgroundColor: "#dbeafe", color: "#1e40af" };
+      case "conference":
+        return { backgroundColor: "#fef9c3", color: "#854d0e" };
+      default:
+        return { backgroundColor: "#e2e8f0", color: "#334155" };
+    }
+  };
+
+  const badgeStyle = getEventTypeBadgeStyleSafe(event.eventType);
 
   return (
     <ScrollView style={styles.detailsContainer}>
@@ -373,7 +461,7 @@ const EventDetails = ({
           />
         )}
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <ArrowLeft width={20} height={20} style={styles.backIcon} />
+          <ArrowLeft width={20} height={20} color={styles.backIcon.color} />
         </TouchableOpacity>
         <View style={styles.detailsHeaderContent}>
           <View
@@ -384,7 +472,7 @@ const EventDetails = ({
             ]}
           >
             <Text style={[styles.eventTypeText, { color: badgeStyle.color }]}>
-              {event.eventType}
+              {event.eventType || "General"}
             </Text>
           </View>
           <Text style={styles.detailsTitle}>{event.eventName}</Text>
@@ -430,7 +518,8 @@ const EventDetails = ({
             <Calendar
               width={18}
               height={18}
-              style={[styles.actionIcon, styles.blueIcon]}
+              style={styles.actionIcon}
+              color="#2563eb"
             />
             <View>
               <Text style={styles.detailPrimary}>
@@ -444,7 +533,8 @@ const EventDetails = ({
             <MapPin
               width={18}
               height={18}
-              style={[styles.actionIcon, styles.blueIcon]}
+              style={styles.actionIcon}
+              color="#2563eb"
             />
             <View>
               <Text style={styles.detailPrimary}>{event.eventLocation}</Text>
@@ -460,7 +550,7 @@ const EventDetails = ({
           <Text style={styles.sectionText}>{event.eventDescription}</Text>
         </View>
 
-        {event.eventAgenda && (
+        {event.eventAgenda && event.eventAgenda.length > 0 && (
           <View style={styles.detailsSection}>
             <Text style={styles.sectionTitle}>Agenda</Text>
             <View style={styles.agendaContainer}>
@@ -823,3 +913,24 @@ const styles = StyleSheet.create({
 });
 
 export default Events;
+
+// Fixed function with null check
+function getEventTypeBadgeStyle(type: string): { backgroundColor: string; color: string } {
+  if (!type) {
+    return { backgroundColor: "#e2e8f0", color: "#334155" };
+  }
+  
+  switch (type.toLowerCase()) {
+    case "hackathon":
+      return { backgroundColor: "#f3e8ff", color: "#6b21a8" };
+    case "workshop":
+      return { backgroundColor: "#dcfce7", color: "#166534" };
+    case "seminar":
+    case "webinar":
+      return { backgroundColor: "#dbeafe", color: "#1e40af" };
+    case "conference":
+      return { backgroundColor: "#fef9c3", color: "#854d0e" };
+    default:
+      return { backgroundColor: "#e2e8f0", color: "#334155" };
+  }
+}
