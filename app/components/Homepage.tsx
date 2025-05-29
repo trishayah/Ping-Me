@@ -1,170 +1,216 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-} from "react-native";
-import {
-  Calendar,
-  Users,
-  PlusCircle,
-  Star,
-  Bell,
-  Settings,
-} from "react-native-feather";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
-import { firebaseApp } from "../../firebaseConfig";
+"use client"
 
-const db = getFirestore(firebaseApp);
+import type React from "react"
+import { useEffect, useState } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native"
+import { Users, PlusCircle, Star } from "react-native-feather"
+import { getFirestore, collection, onSnapshot, query, where } from "firebase/firestore"
+import { firebaseApp } from "../../firebaseConfig"
 
-// import type { StackNavigationProp } from '@react-navigation/stack';
-// import { useLocalSearchParams } from 'expo-router';
+const db = getFirestore(firebaseApp)
 
 type HomepageProps = {
-  navigation: any;
-  route?: any;
+  navigation: any
+  route?: any
   userData?: {
-    userType: "student" | "organizer";
-    email: string;
-    firstName: string;
-    userName: string;
-  };
-};
+    userType: "student" | "organizer"
+    email: string
+    firstName: string
+    userName: string
+    userId?: string
+  }
+}
 
 const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
-  const firstName = userData?.firstName || "User";
-  const userType = userData?.userType || "student";
+  const firstName = userData?.firstName || "User"
+  const userType = userData?.userType || "student"
+  const userId = userData?.userId
+  const userEmail = userData?.email
 
   // State for Firestore data
-  const [totalEvents, setTotalEvents] = useState(0);
-  const [totalAttendees, setTotalAttendees] = useState(0);
-  const [upcomingEvents, setUpcomingEvents] = useState(0);
-  const [upcomingEventsList, setUpcomingEventsList] = useState<any[]>([]);
+  const [totalEvents, setTotalEvents] = useState(0)
+  const [totalAttendees, setTotalAttendees] = useState(0)
+  const [upcomingEvents, setUpcomingEvents] = useState(0)
+  const [upcomingEventsList, setUpcomingEventsList] = useState<any[]>([])
 
   // For student RSVP events
-  const [studentRSVPEvents, setStudentRSVPEvents] = useState<any[]>([]);
+  const [studentRSVPEvents, setStudentRSVPEvents] = useState<any[]>([])
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const eventsSnapshot = await getDocs(collection(db, "events"));
-        let events = [];
-        let attendeesSum = 0;
-        let upcoming = 0;
-        let now = new Date();
+    console.log("=== HOMEPAGE REAL-TIME SETUP ===")
+    console.log("userType:", userType)
+    console.log("userId:", userId)
+    console.log("userData:", userData)
+
+    let eventsUnsubscribe: (() => void) | null = null
+    let registrationsUnsubscribe: (() => void) | null = null
+
+    // Set up real-time listener for events
+    const setupEventsListener = () => {
+      let eventsQuery
+
+      if (userType === "organizer" && userId) {
+        console.log("Setting up real-time listener for organizer events with userId:", userId)
+        eventsQuery = query(collection(db, "events"), where("createdBy", "==", userId))
+      } else {
+        console.log("Setting up real-time listener for all events")
+        eventsQuery = collection(db, "events")
+      }
+
+      eventsUnsubscribe = onSnapshot(eventsQuery, (eventsSnapshot) => {
+        console.log("=== EVENTS REAL-TIME UPDATE ===")
+        console.log("Received", eventsSnapshot.size, "events")
+
+        interface FirestoreEvent {
+          id: string
+          name?: string
+          date?: string
+          attendees?: number | any[]
+          createdBy?: string
+          [key: string]: any
+        }
+        const events: FirestoreEvent[] = []
+        let attendeesSum = 0
+        let upcoming = 0
+        const now = new Date()
 
         eventsSnapshot.forEach((doc) => {
-          const data = doc.data();
-          events.push({ id: doc.id, ...data });
+          const data = doc.data()
+          console.log("Event:", doc.id, data)
+          events.push({ id: doc.id, ...data })
+          
           // Sum attendees (assume number or array)
           if (typeof data.attendees === "number") {
-            attendeesSum += data.attendees;
+            attendeesSum += data.attendees
           } else if (Array.isArray(data.attendees)) {
-            attendeesSum += data.attendees.length;
+            attendeesSum += data.attendees.length
           }
+          
           // Count upcoming events
           if (data.date) {
-            const eventDate = new Date(data.date);
+            const eventDate = new Date(data.date)
             if (eventDate >= now) {
-              upcoming += 1;
+              upcoming += 1
             }
           }
-        });
+        })
 
-        setTotalEvents(events.length);
-        setTotalAttendees(attendeesSum);
-        setUpcomingEvents(upcoming);
+        setTotalEvents(events.length)
+        setTotalAttendees(attendeesSum)
+        setUpcomingEvents(upcoming)
 
         // For upcoming events list (sorted by date, next 5)
         const upcomingList = events
           .filter((ev) => ev.date && new Date(ev.date) >= now)
-          .sort((a, b) => new Date(a.date) - new Date(b.date))
-          .slice(0, 5);
-        setUpcomingEventsList(upcomingList);
-      } catch (e) {
-        // fallback to 0s if error
-        setTotalEvents(0);
-        setTotalAttendees(0);
-        setUpcomingEvents(0);
-        setUpcomingEventsList([]);
-      }
-    };
-    fetchStats();
+          .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
+          .slice(0, 5)
+        setUpcomingEventsList(upcomingList)
 
-    // Fetch RSVP'd events for students
-    const fetchStudentRSVP = async () => {
-      if (userType !== "student" || !userData?.email) {
-        setStudentRSVPEvents([]);
-        return;
+        console.log("Updated stats:")
+        console.log("- Total events:", events.length)
+        console.log("- Upcoming events:", upcoming)
+        console.log("- Upcoming events list:", upcomingList.length)
+        console.log("===============================")
+      }, (error) => {
+        console.error("Error in events listener:", error)
+        setTotalEvents(0)
+        setTotalAttendees(0)
+        setUpcomingEvents(0)
+        setUpcomingEventsList([])
+      })
+    }
+
+    // Set up real-time listener for student RSVP events
+    const setupStudentRSVPListener = () => {
+      if (userType !== "student" || !userEmail) {
+        setStudentRSVPEvents([])
+        return
       }
-      try {
-        // Assume a "registrations" collection with attendeeEmail and eventId
-        const registrationsSnapshot = await getDocs(
-          collection(db, "registrations")
-        );
+
+      console.log("Setting up real-time listener for student RSVP events:", userEmail)
+      
+      registrationsUnsubscribe = onSnapshot(collection(db, "registrations"), (registrationsSnapshot) => {
+        console.log("=== REGISTRATIONS REAL-TIME UPDATE ===")
+        
         const myRegistrations = registrationsSnapshot.docs
           .map((doc) => doc.data())
-          .filter((reg) => reg.attendeeEmail === userData.email);
+          .filter((reg) => reg.attendeeEmail === userEmail)
+
+        console.log("Found registrations:", myRegistrations.length)
 
         // Get eventIds
-        const eventIds = myRegistrations.map((reg) => reg.eventId);
+        const eventIds = myRegistrations.map((reg) => reg.eventId)
 
-        // Fetch events for those eventIds
-        const eventsSnapshot = await getDocs(collection(db, "events"));
-        const myEvents = eventsSnapshot.docs
-          .filter((doc) => eventIds.includes(doc.id))
-          .map((doc) => ({ id: doc.id, ...doc.data() }));
+        if (eventIds.length === 0) {
+          setStudentRSVPEvents([])
+          return
+        }
 
-        setStudentRSVPEvents(myEvents);
-      } catch (e) {
-        setStudentRSVPEvents([]);
-      }
-    };
+        // Set up listener for events that the student is registered for
+        const eventsQuery = collection(db, "events")
+        onSnapshot(eventsQuery, (eventsSnapshot) => {
+          const myEvents = eventsSnapshot.docs
+            .filter((doc) => eventIds.includes(doc.id))
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
 
-    fetchStudentRSVP();
-  }, [userType, userData?.email]);
+          console.log("Student RSVP events updated:", myEvents.length)
+          setStudentRSVPEvents(myEvents)
+        })
+      }, (error) => {
+        console.error("Error in registrations listener:", error)
+        setStudentRSVPEvents([])
+      })
+    }
+
+    setupEventsListener()
+    setupStudentRSVPListener()
+
+    // Cleanup function
+    return () => {
+      console.log("Cleaning up Homepage listeners")
+      if (eventsUnsubscribe) eventsUnsubscribe()
+      if (registrationsUnsubscribe) registrationsUnsubscribe()
+    }
+  }, [userType, userId, userEmail])
 
   const renderOrganizerStats = () => (
     <View style={styles.statsContainer}>
       <View style={styles.statCard}>
         <Text style={styles.statNumber}>{totalEvents}</Text>
-        <Text style={styles.statLabel}>Total Events</Text>
+        <Text style={styles.statLabel}>My Events</Text>
       </View>
       <View style={styles.statCard}>
         <Text style={styles.statNumber}>{totalAttendees}</Text>
-        <Text style={styles.statLabel}>Attendees</Text>
+        <Text style={styles.statLabel}>Total Attendees</Text>
       </View>
       <View style={styles.statCard}>
         <Text style={styles.statNumber}>{upcomingEvents}</Text>
         <Text style={styles.statLabel}>Upcoming</Text>
       </View>
     </View>
-  );
+  )
 
   const renderQuickActions = () => (
     <View style={styles.quickActionsContainer}>
       {userType === "organizer" ? (
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => navigation.navigate("Events", { screen: "AddEvent" })}
+          onPress={() => navigation.navigate("Events", { 
+            screen: "AddEvent", 
+            params: { userData } 
+          })}
         >
           <PlusCircle width={24} height={24} style={styles.actionIcon} />
           <Text style={styles.actionText}>Create Event</Text>
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate("Events")}
-        >
+        <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate("Events")}>
           <Star width={24} height={24} style={styles.actionIcon} />
           <Text style={styles.actionText}>Browse Events</Text>
         </TouchableOpacity>
       )}
     </View>
-  );
+  )
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1 }}>
@@ -182,23 +228,19 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       {renderQuickActions()}
 
-      <Text style={styles.sectionTitle}>Upcoming Events</Text>
+      <Text style={styles.sectionTitle}>{userType === "organizer" ? "My Upcoming Events" : "Upcoming Events"}</Text>
       <View style={styles.verticalEventsList}>
         {upcomingEventsList.length > 0 ? (
           upcomingEventsList.map((event) => {
-            const eventDate = event.date ? new Date(event.date) : null;
-            const day = eventDate ? eventDate.getDate() : "--";
-            const month = eventDate
-              ? eventDate
-                  .toLocaleString("en-US", { month: "short" })
-                  .toUpperCase()
-              : "--";
+            const eventDate = event.date ? new Date(event.date) : null
+            const day = eventDate ? eventDate.getDate() : "--"
+            const month = eventDate ? eventDate.toLocaleString("en-US", { month: "short" }).toUpperCase() : "--"
             const attendeesCount =
               typeof event.attendees === "number"
                 ? event.attendees
                 : Array.isArray(event.attendees)
-                ? event.attendees.length
-                : 0;
+                  ? event.attendees.length
+                  : 0
             return (
               <TouchableOpacity key={event.id} style={styles.eventCard}>
                 <View style={styles.eventDateBadge}>
@@ -206,27 +248,20 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
                   <Text style={styles.eventDateMonth}>{month}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.eventTitle}>
-                    {event.name || "Untitled"}
-                  </Text>
+                  <Text style={styles.eventTitle}>{event.name || "Untitled"}</Text>
                   <View style={styles.eventDetailBelow}>
                     <Users width={14} height={14} style={styles.eventIcon} />
-                    <Text style={styles.eventDetailText}>
-                      {attendeesCount} attending
-                    </Text>
+                    <Text style={styles.eventDetailText}>{attendeesCount} attending</Text>
                   </View>
                 </View>
               </TouchableOpacity>
-            );
+            )
           })
         ) : (
-          <View
-            style={[
-              styles.eventCard,
-              { justifyContent: "center", alignItems: "center" },
-            ]}
-          >
-            <Text style={{ color: "#64748b" }}>No upcoming events</Text>
+          <View style={[styles.eventCard, { justifyContent: "center", alignItems: "center" }]}>
+            <Text style={{ color: "#64748b" }}>
+              {userType === "organizer" ? "No upcoming events created by you" : "No upcoming events"}
+            </Text>
           </View>
         )}
       </View>
@@ -238,19 +273,15 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
           <View style={styles.verticalEventsList}>
             {studentRSVPEvents.length > 0 ? (
               studentRSVPEvents.map((event) => {
-                const eventDate = event.date ? new Date(event.date) : null;
-                const day = eventDate ? eventDate.getDate() : "--";
-                const month = eventDate
-                  ? eventDate
-                      .toLocaleString("en-US", { month: "short" })
-                      .toUpperCase()
-                  : "--";
+                const eventDate = event.date ? new Date(event.date) : null
+                const day = eventDate ? eventDate.getDate() : "--"
+                const month = eventDate ? eventDate.toLocaleString("en-US", { month: "short" }).toUpperCase() : "--"
                 const attendeesCount =
                   typeof event.attendees === "number"
                     ? event.attendees
                     : Array.isArray(event.attendees)
-                    ? event.attendees.length
-                    : 0;
+                      ? event.attendees.length
+                      : 0
                 return (
                   <TouchableOpacity key={event.id} style={styles.eventCard}>
                     <View style={styles.eventDateBadge}>
@@ -258,37 +289,26 @@ const Homepage: React.FC<HomepageProps> = ({ navigation, route, userData }) => {
                       <Text style={styles.eventDateMonth}>{month}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.eventTitle}>
-                        {event.name || "Untitled"}
-                      </Text>
+                      <Text style={styles.eventTitle}>{event.name || "Untitled"}</Text>
                       <View style={styles.eventDetailBelow}>
                         <Users width={14} height={14} style={styles.eventIcon} />
-                        <Text style={styles.eventDetailText}>
-                          {attendeesCount} attending
-                        </Text>
+                        <Text style={styles.eventDetailText}>{attendeesCount} attending</Text>
                       </View>
                     </View>
                   </TouchableOpacity>
-                );
+                )
               })
             ) : (
-              <View
-                style={[
-                  styles.eventCard,
-                  { justifyContent: "center", alignItems: "center" },
-                ]}
-              >
-                <Text style={{ color: "#64748b" }}>
-                  You have not registered for any events
-                </Text>
+              <View style={[styles.eventCard, { justifyContent: "center", alignItems: "center" }]}>
+                <Text style={{ color: "#64748b" }}>You have not registered for any events</Text>
               </View>
             )}
           </View>
         </>
       )}
     </ScrollView>
-  );
-};
+  )
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -443,6 +463,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     flexDirection: "column",
   },
-});
+})
 
-export default Homepage;
+export default Homepage

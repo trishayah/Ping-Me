@@ -26,10 +26,6 @@ import {
   doc,
   getDoc,
   updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
 } from "firebase/firestore";
 
 interface UserProfile {
@@ -45,6 +41,7 @@ interface UserProfile {
 }
 
 interface ProfileProps {
+  userId: string;
   onLogin: (
     email: string,
     password: string,
@@ -75,27 +72,12 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
 
-  const getCurrentUserId = async () => {
-    try {
-      const q = query(collection(db, "accounts"));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        return querySnapshot.docs[0].id;
-      }
-      return null;
-    } catch (error) {
-      console.error("Error getting user ID:", error);
-      return null;
-    }
-  };
-
   const loadUserProfile = async () => {
     try {
       setLoading(true);
-      const userId = await getCurrentUserId();
-
+      
       if (!userId) {
-        Alert.alert("Error", "User not found. Please log in again.");
+        Alert.alert("Error", "User ID not provided. Please log in again.");
         return;
       }
 
@@ -104,6 +86,11 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
       if (userDoc.exists()) {
         const userData = { id: userDoc.id, ...userDoc.data() } as UserProfile;
         setUser(userData);
+
+        // Handle Firestore timestamp conversion if needed
+        if (userData.createdAt && (userData.createdAt as any).toDate) {
+          userData.createdAt = (userData.createdAt as any).toDate().toISOString();
+        }
 
         // Set editable fields
         setEditFirstName(userData.firstName);
@@ -152,15 +139,6 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
     setEditFirstName(user?.firstName || "");
     setEditLastName(user?.lastName || "");
     setEditing(false);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
   };
 
   useEffect(() => {

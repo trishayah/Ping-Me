@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   SafeAreaView,
   Alert,
+  RefreshControl,
 } from "react-native";
 import {
   Search,
@@ -30,12 +31,14 @@ import {
   updateDoc,
   deleteDoc,
   addDoc,
+  query,
+  where,
 } from "firebase/firestore";
 import { firebaseApp } from "../../firebaseConfig";
 
 const db = getFirestore(firebaseApp);
 
-import { NavigationProp } from "@react-navigation/native";
+import { NavigationProp, useFocusEffect } from "@react-navigation/native";
 
 // Define the EventData type
 type EventData = {
@@ -48,6 +51,7 @@ type EventData = {
   eventTime: string;
   eventAttendees?: any[];
   eventImage?: { uri: string } | null;
+  createdBy?: string; // Added to track who created the event
 };
 
 const Events = ({
@@ -59,46 +63,89 @@ const Events = ({
   userType?: string;
   initialEvents?: any[];
   navigation: NavigationProp<any>;
-  userData?: { email: string; firstName: string };
+  userData?: { 
+    email: string; 
+    firstName: string; 
+    userId?: string; // Added userId to userData
+  };
 }) => {
   // Debug log for userType
   console.log("Events component userType:", userType);
+  console.log("Events component userData:", userData);
 
   const [events, setEvents] = useState<EventData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
   const [rsvpedEvents, setRsvpedEvents] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "events"));
-        const fetchedEvents: EventData[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          console.log("Event data:", data); // Debug log
-          fetchedEvents.push({
-            id: doc.id,
-            eventName: data.name || "",
-            eventDescription: data.description || "",
-            eventType: data.category || "general", // Provide default value
-            eventLocation: data.location || "",
-            eventDate: data.date || "",
-            eventTime: data.time || "",
-            eventAttendees: data.attendees ? [data.attendees] : [],
-            eventImage: data.image ? { uri: data.image } : null,
-          });
-        });
-        setEvents(fetchedEvents);
-      } catch (error) {
-        console.error("Error fetching events:", error);
+  const fetchEvents = useCallback(async () => {
+    try {
+      setLoading(true);
+      let eventsQuery;
+      
+      // If user is an organizer, only fetch events they created
+      if (userType === "organizer" && userData?.userId) {
+        eventsQuery = query(
+          collection(db, "events"),
+          where("createdBy", "==", userData.userId)
+        );
+        console.log("Fetching events for organizer:", userData.userId);
+      } else {
+        // For students or when no userId, fetch all events
+        eventsQuery = collection(db, "events");
+        console.log("Fetching all events for student");
       }
-    };
-    fetchEvents();
-  }, []);
 
-  // Removed duplicate filteredEvents declaration to fix redeclaration error.
+      const querySnapshot = await getDocs(eventsQuery);
+      const fetchedEvents: EventData[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        console.log("Event data:", data); // Debug log
+        fetchedEvents.push({
+          id: doc.id,
+          eventName: data.name || "",
+          eventDescription: data.description || "",
+          eventType: data.category || "general", // Provide default value
+          eventLocation: data.location || "",
+          eventDate: data.date || "",
+          eventTime: data.time || "",
+          eventAttendees: data.attendees ? [data.attendees] : [],
+          eventImage: data.image ? { uri: data.image } : null,
+          createdBy: data.createdBy || "", // Include createdBy field
+        });
+      });
+      
+      setEvents(fetchedEvents);
+      console.log(`Fetched ${fetchedEvents.length} events for ${userType}`);
+    } catch (error) {
+      console.error("Error fetching events:", error);
+      Alert.alert("Error", "Failed to fetch events. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [userType, userData?.userId]);
+
+  // Use useFocusEffect to refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchEvents();
+    }, [fetchEvents])
+  );
+
+  // Initial fetch
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchEvents();
+    setRefreshing(false);
+  }, [fetchEvents]);
 
   interface HandleRSVP {
     (eventId: string): void;
@@ -145,7 +192,7 @@ const Events = ({
           attendees: newAttendees,
         });
 
-        refreshEvents && refreshEvents();
+        await fetchEvents(); // Refresh events after RSVP
       } catch (e) {
         console.error("Failed to save RSVP to Firestore:", e);
       }
@@ -221,6 +268,15 @@ const Events = ({
     formatDate,
     getEventTypeBadgeStyle,
     refreshEvents, // new prop
+  }: {
+    event: EventData;
+    onBack: () => void;
+    onRSVP: (eventId: string) => void;
+    isAttending: boolean;
+    userType: string;
+    formatDate: (dateString: string) => string;
+    getEventTypeBadgeStyle: (type: string) => { backgroundColor: string; color: string };
+    refreshEvents?: () => void;
   }) => {
     // Use the getEventTypeBadgeStyle function with null check
     const getEventTypeBadgeStyleSafe = (type: string) => {
@@ -254,14 +310,14 @@ const Events = ({
       eventLocation: event.eventLocation,
       eventType: event.eventType,
     });
-    const [loading, setLoading] = useState(false);
+    const [editLoading, setEditLoading] = useState(false);
 
-    const handleEditChange = (field, value) => {
+    const handleEditChange = (field:any, value:any) => {
       setEditData({ ...editData, [field]: value });
     };
 
     const handleSaveEdit = async () => {
-      setLoading(true);
+      setEditLoading(true);
       try {
         const eventRef = doc(db, "events", event.id);
         await updateDoc(eventRef, {
@@ -274,10 +330,12 @@ const Events = ({
         });
         setEditMode(false);
         if (refreshEvents) refreshEvents();
+        Alert.alert("Success", "Event updated successfully!");
       } catch (e) {
-        alert("Failed to update event.");
+        console.error("Failed to update event:", e);
+        Alert.alert("Error", "Failed to update event. Please try again.");
       }
-      setLoading(false);
+      setEditLoading(false);
     };
 
     const handleDelete = async () => {
@@ -290,20 +348,26 @@ const Events = ({
             text: "Delete",
             style: "destructive",
             onPress: async () => {
-              setLoading(true);
+              setEditLoading(true);
               try {
                 await deleteDoc(doc(db, "events", event.id));
                 if (refreshEvents) refreshEvents();
                 onBack();
+                Alert.alert("Success", "Event deleted successfully!");
               } catch (e) {
-                alert("Failed to delete event.");
+                console.error("Failed to delete event:", e);
+                Alert.alert("Error", "Failed to delete event. Please try again.");
               }
-              setLoading(false);
+              setEditLoading(false);
             },
           },
         ]
       );
     };
+
+    // Check if current user can edit this event (only if they created it)
+    const canEditEvent = userType === "organizer" && 
+                        event.createdBy === userData?.userId;
 
     const detailsContent = (
       <View style={styles.detailsContent}>
@@ -331,17 +395,17 @@ const Events = ({
                 {isAttending ? "Attending" : "RSVP"}
               </Text>
             </TouchableOpacity>
-          ) : userType === "organizer" ? (
+          ) : canEditEvent ? (
             <View style={{ flexDirection: "row" }}>
               {editMode ? (
                 <>
                   <TouchableOpacity
                     style={[styles.editButton, { marginRight: 8 }]}
                     onPress={handleSaveEdit}
-                    disabled={loading}
+                    disabled={editLoading}
                   >
                     <Text style={styles.editButtonText}>
-                      {loading ? "Saving..." : "Save"}
+                      {editLoading ? "Saving..." : "Save"}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -350,7 +414,7 @@ const Events = ({
                       { backgroundColor: "#64748b", borderColor: "#64748b" },
                     ]}
                     onPress={() => setEditMode(false)}
-                    disabled={loading}
+                    disabled={editLoading}
                   >
                     <Text style={styles.editButtonText}>Cancel</Text>
                   </TouchableOpacity>
@@ -398,14 +462,14 @@ const Events = ({
                     style={styles.detailPrimary}
                     value={editData.eventDate}
                     onChangeText={(v) => handleEditChange("eventDate", v)}
-                    editable={!loading}
+                    editable={!editLoading}
                     placeholder="YYYY-MM-DD"
                   />
                   <TextInput
                     style={styles.detailSecondary}
                     value={editData.eventTime}
                     onChangeText={(v) => handleEditChange("eventTime", v)}
-                    editable={!loading}
+                    editable={!editLoading}
                     placeholder="Time"
                   />
                 </>
@@ -435,7 +499,7 @@ const Events = ({
                   style={styles.detailPrimary}
                   value={editData.eventLocation}
                   onChangeText={(v) => handleEditChange("eventLocation", v)}
-                  editable={!loading}
+                  editable={!editLoading}
                   placeholder="Location"
                 />
               ) : (
@@ -454,7 +518,7 @@ const Events = ({
                 style={styles.detailPrimary}
                 value={editData.eventType}
                 onChangeText={(v) => handleEditChange("eventType", v)}
-                editable={!loading}
+                editable={!editLoading}
                 placeholder="Type"
               />
             ) : (
@@ -480,7 +544,7 @@ const Events = ({
               ]}
               value={editData.eventDescription}
               onChangeText={(v) => handleEditChange("eventDescription", v)}
-              editable={!loading}
+              editable={!editLoading}
               multiline
             />
           ) : (
@@ -534,7 +598,7 @@ const Events = ({
                 ]}
                 value={editData.eventName}
                 onChangeText={(v) => handleEditChange("eventName", v)}
-                editable={!loading}
+                editable={!editLoading}
               />
             ) : (
               <Text style={styles.detailsTitle}>
@@ -548,34 +612,6 @@ const Events = ({
       </ScrollView>
     );
   };
-
-  const refreshEvents = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, "events"));
-      const fetchedEvents: EventData[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        fetchedEvents.push({
-          id: doc.id,
-          eventName: data.name || "",
-          eventDescription: data.description || "",
-          eventType: data.category || "general",
-          eventLocation: data.location || "",
-          eventDate: data.date || "",
-          eventTime: data.time || "",
-          eventAttendees: data.attendees ? [data.attendees] : [],
-          eventImage: data.image ? { uri: data.image } : null,
-        });
-      });
-      setEvents(fetchedEvents);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-    }
-  };
-
-  useEffect(() => {
-    refreshEvents();
-  }, []);
 
   const filteredEvents = events.filter((event) => {
     // Add null checks for event properties
@@ -613,7 +649,7 @@ const Events = ({
         userType={userType}
         formatDate={formatDetailedDate}
         getEventTypeBadgeStyle={getEventTypeBadgeStyle}
-        refreshEvents={refreshEvents}
+        refreshEvents={fetchEvents}
       />
     );
   }
@@ -636,11 +672,10 @@ const Events = ({
               style={styles.addButton}
               onPress={() => {
                 console.log("Add button pressed");
-                navigation.navigate("AddEvent");
+                navigation.navigate("AddEvent", { userData });
               }}
             >
               <Plus width={22} height={22} color={styles.addIcon.color} />
-              {/* <Text style={{color: 'white'}}>Add</Text> // Uncomment for debug */}
             </TouchableOpacity>
           )}
         </View>
@@ -737,7 +772,11 @@ const Events = ({
         </ScrollView>
       </View>
 
-      {filteredEvents.length > 0 ? (
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading events...</Text>
+        </View>
+      ) : filteredEvents.length > 0 ? (
         <FlatList
           data={filteredEvents}
           keyExtractor={(item) => item.id.toString()}
@@ -751,19 +790,35 @@ const Events = ({
             />
           )}
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         />
       ) : (
         <View style={styles.emptyContainer}>
           <Filter width={48} height={48} style={styles.emptyIcon} />
           <Text style={styles.emptyText}>
-            No events found matching your criteria
+            {userType === "organizer" 
+              ? "No events created by you yet. Tap the + button to create your first event!" 
+              : "No events found matching your criteria"
+            }
           </Text>
+          {userType === "organizer" && (
+            <TouchableOpacity
+              style={styles.createFirstEventButton}
+              onPress={() => navigation.navigate("AddEvent")}
+            >
+              <Plus width={20} height={20} color="#fff" />
+              <Text style={styles.createFirstEventText}>Create Your First Event</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </SafeAreaView>
   );
 };
 
+// Rest of the component remains the same...
 type EventCardProps = {
   event: EventData;
   onPress: () => void;
@@ -783,9 +838,6 @@ const EventCard: React.FC<EventCardProps> = ({
   getEventTypeBadgeStyle,
 }) => {
   const badgeStyle = getEventTypeBadgeStyle(event.eventType);
-
-  // Debug log for image
-  console.log("Event image:", event.eventImage);
 
   return (
     <TouchableOpacity style={styles.cardContainer} onPress={onPress}>
@@ -894,7 +946,7 @@ const styles = StyleSheet.create({
   },
   addButton: {
     marginLeft: 10,
-    backgroundColor: "#1e40af", // More vibrant blue
+    backgroundColor: "#1e40af",
     borderRadius: 8,
     padding: 8,
     justifyContent: "center",
@@ -906,7 +958,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   addIcon: {
-    color: "#fff", // White icon for contrast
+    color: "#fff",
   },
   filterContainer: {
     marginBottom: 8,
@@ -931,6 +983,16 @@ const styles = StyleSheet.create({
   activeFilterText: {
     color: "white",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+  },
+  loadingText: {
+    color: "#64748b",
+    fontSize: 16,
+  },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 16,
@@ -949,6 +1011,25 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontSize: 16,
     textAlign: "center",
+    marginBottom: 20,
+  },
+  createFirstEventButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1e40af",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+  },
+  createFirstEventText: {
+    color: "#fff",
+    fontWeight: "600",
+    marginLeft: 8,
   },
   cardContainer: {
     backgroundColor: "white",
@@ -979,39 +1060,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: "flex-start",
   },
-  defaultBadge: {
-    backgroundColor: "#e2e8f0",
-  },
-  hackathonBadge: {
-    backgroundColor: "#f3e8ff",
-  },
-  workshopBadge: {
-    backgroundColor: "#dcfce7",
-  },
-  seminarBadge: {
-    backgroundColor: "#dbeafe",
-  },
-  conferenceBadge: {
-    backgroundColor: "#fef9c3",
-  },
   eventTypeText: {
     fontSize: 12,
     fontWeight: "500",
-  },
-  defaultBadgeText: {
-    color: "#334155",
-  },
-  hackathonBadgeText: {
-    color: "#6b21a8",
-  },
-  workshopBadgeText: {
-    color: "#166534",
-  },
-  seminarBadgeText: {
-    color: "#1e40af",
-  },
-  conferenceBadgeText: {
-    color: "#854d0e",
   },
   attendingBadge: {
     backgroundColor: "#2563eb",
@@ -1114,9 +1165,6 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginRight: 8,
   },
-  blueIcon: {
-    color: "#2563eb",
-  },
   attendingCount: {
     color: "#334155",
     fontSize: 14,
@@ -1126,11 +1174,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#22c55e", // Green border
+    borderColor: "#22c55e",
     backgroundColor: "#fff",
   },
   rsvpButtonActive: {
-    backgroundColor: "#22c55e", // Green when active
+    backgroundColor: "#22c55e",
   },
   rsvpButtonText: {
     color: "#22c55e",
@@ -1146,8 +1194,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1e40af", // Match addButton color
-    backgroundColor: "#1e40af", // Vibrant blue
+    borderColor: "#1e40af",
+    backgroundColor: "#1e40af",
     elevation: 2,
   },
   editIcon: {

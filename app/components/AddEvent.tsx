@@ -20,7 +20,20 @@ import { ArrowLeft } from "react-native-feather";
 
 const db = getFirestore(firebaseApp);
 
-export default function AddEvent({ navigation }) {
+export default function AddEvent({ 
+  navigation, 
+  route 
+}: { 
+  navigation?: any;
+  route?: any;
+}) {
+  // Get userData from route params
+  const userData = route?.params?.userData;
+  
+  console.log("=== ADD EVENT COMPONENT ===");
+  console.log("userData from route:", userData);
+  console.log("userId:", userData?.userId);
+
   const [image, setImage] = useState<string | null>(null);
   const [eventTime, setEventTime] = useState<Date | undefined>(undefined);
   const [eventDate, setEventDate] = useState<Date | undefined>(undefined);
@@ -100,8 +113,24 @@ export default function AddEvent({ navigation }) {
       return;
     }
 
+    // Check if userData and userId are available
+    if (!userData?.userId) {
+      Alert.alert(
+        "Error", 
+        "User information not found. Please log out and log back in.",
+        [
+          {
+            text: "OK",
+            onPress: () => navigation?.goBack?.()
+          }
+        ]
+      );
+      console.error("No userId found in userData:", userData);
+      return;
+    }
+
     try {
-      await addDoc(collection(db, "events"), {
+      const eventData = {
         name: eventName,
         description: eventDescription,
         category: eventCategory.toLowerCase(),
@@ -110,27 +139,52 @@ export default function AddEvent({ navigation }) {
         time: eventTime.toISOString(),
         attendees: Number(attendees),
         image: image || null,
+        createdBy: userData.userId, // THIS IS THE CRUCIAL FIELD!
         createdAt: new Date().toISOString(),
-      });
+        updatedAt: new Date().toISOString(),
+      };
 
-      Alert.alert("Success", "Your event has been successfully saved.");
-      // Reset form
-      setEventName("");
-      setEventDescription("");
-      setEventCategory("");
-      setEventLocation("");
-      setEventDate(undefined);
-      setEventTime(undefined);
-      setAttendees("");
-      setImage(null);
+      console.log("Creating event with data:", eventData);
+
+      const docRef = await addDoc(collection(db, "events"), eventData);
+      
+      console.log("Event created successfully with ID:", docRef.id);
+
+      Alert.alert("Success", "Your event has been successfully saved.", [
+        {
+          text: "OK",
+          onPress: () => {
+            // Reset form
+            setEventName("");
+            setEventDescription("");
+            setEventCategory("");
+            setEventLocation("");
+            setEventDate(undefined);
+            setEventTime(undefined);
+            setAttendees("");
+            setImage(null);
+            
+            // Navigate back
+            navigation?.goBack?.();
+          }
+        }
+      ]);
     } catch (error) {
-      Alert.alert("Error", "Failed to save event.");
+      Alert.alert("Error", "Failed to save event. Please try again.");
       console.error("Firestore error:", error);
     }
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* Debug Panel */}
+      {/* <View style={styles.debugPanel}>
+        <Text style={styles.debugText}>
+          Debug: UserID = {userData?.userId || "MISSING!"} | 
+          Email = {userData?.email || "MISSING!"}
+        </Text>
+      </View> */}
+
       {/* Custom Header with Back Button */}
       <View style={styles.headerRow}>
         <TouchableOpacity
@@ -244,6 +298,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: width * 0.06,
     backgroundColor: "#fff",
     flexGrow: 1,
+  },
+  debugPanel: {
+    backgroundColor: "#fef3c7",
+    padding: 8,
+    borderRadius: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#f59e0b",
+  },
+  debugText: {
+    fontSize: 12,
+    color: "#92400e",
+    fontWeight: "bold",
   },
   headerRow: {
     flexDirection: "row",

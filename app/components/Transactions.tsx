@@ -12,7 +12,6 @@ import {
   query,
   onSnapshot,
   where,
-  getDocs,
 } from "firebase/firestore";
 import { firebaseApp, db } from "../../firebaseConfig";
 
@@ -31,60 +30,158 @@ type Event = {
   eventName: string;
   attendees: number; // max capacity
   registrations: Registration[];
+  createdBy?: string; // Added to track event creator
 };
 
-const Transactions = ({ userType = "organizer" }) => {
+const Transactions = ({ 
+  userType = "organizer",
+  userData
+}: {
+  userType?: "student" | "organizer";
+  userData?: {
+    userId?: string;
+    email?: string;
+    userType?: "student" | "organizer";
+  };
+}) => {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch all events and their registrations from Firestore
-    const fetchAllData = async () => {
-      try {
-        // Get all events
-        const eventsSnapshot = await getDocs(collection(db, "events"));
+    console.log("=== TRANSACTIONS REAL-TIME SETUP ===");
+    console.log("userType:", userType);
+    console.log("userId:", userData?.userId);
+    console.log("email:", userData?.email);
+
+    let eventsUnsubscribe: (() => void) | null = null;
+    let registrationsUnsubscribes: (() => void)[] = [];
+
+    const setupRealTimeListeners = () => {
+      let eventsQuery;
+      
+      // Apply filtering based on user type
+      if (userType === "organizer" && userData?.userId) {
+        console.log("Setting up real-time listener for organizer events");
+        eventsQuery = query(
+          collection(db, "events"),
+          where("createdBy", "==", userData.userId)
+        );
+      } else {
+        console.log("Setting up real-time listener for all events");
+        eventsQuery = collection(db, "events");
+      }
+
+      // Set up real-time listener for events
+      eventsUnsubscribe = onSnapshot(eventsQuery, (eventsSnapshot) => {
+        console.log("=== EVENTS UPDATE IN TRANSACTIONS ===");
+        console.log("Received", eventsSnapshot.size, "events");
+
+        // Clear previous registration listeners
+        registrationsUnsubscribes.forEach(unsub => unsub());
+        registrationsUnsubscribes = [];
+
         const eventsData: Event[] = [];
+        let processedEvents = 0;
 
-        for (const docSnap of eventsSnapshot.docs) {
-          const eventData = docSnap.data();
-          // Get all registrations for this event
-          const registrationsSnapshot = await getDocs(
-            query(
-              collection(db, "registrations"),
-              where("eventId", "==", docSnap.id)
-            )
-          );
-          const registrations: Registration[] = registrationsSnapshot.docs.map(
-            (regDoc) => {
-              const regData = regDoc.data();
-              return {
-                id: regDoc.id,
-                attendeeName: regData.attendeeName || "",
-                attendeeEmail: regData.attendeeEmail || "",
-                eventId: regData.eventId,
-                eventName: regData.eventName,
-                registrationDate: regData.registrationDate,
-                status: regData.status,
-              };
-            }
-          );
-
-          eventsData.push({
-            id: docSnap.id,
-            eventName: eventData.eventName || eventData.name || "",
-            attendees: eventData.attendees || 0,
-            registrations,
-          });
+        if (eventsSnapshot.empty) {
+          console.log("No events found");
+          setEvents([]);
+          return;
         }
 
-        setEvents(eventsData);
-      } catch (e) {
+        eventsSnapshot.docs.forEach((docSnap) => {
+          const eventData = docSnap.data();
+          console.log("Processing event:", docSnap.id, eventData.name || eventData.eventName);
+          
+          let registrationsQuery;
+          
+          // For students, only show their own registrations
+          if (userType === "student" && userData?.email) {
+            registrationsQuery = query(
+              collection(db, "registrations"),
+              where("eventId", "==", docSnap.id),
+              where("attendeeEmail", "==", userData.email)
+            );
+          } else {
+            // For organizers, show all registrations for their events
+            registrationsQuery = query(
+              collection(db, "registrations"),
+              where("eventId", "==", docSnap.id)
+            );
+          }
+
+          // Set up real-time listener for registrations of this event
+          const registrationsUnsub = onSnapshot(registrationsQuery, (registrationsSnapshot) => {
+            console.log(`Registrations update for event ${docSnap.id}:`, registrationsSnapshot.size, "registrations");
+            
+            const registrations: Registration[] = registrationsSnapshot.docs.map(
+              (regDoc) => {
+                const regData = regDoc.data();
+                return {
+                  id: regDoc.id,
+                  attendeeName: regData.attendeeName || "",
+                  attendeeEmail: regData.attendeeEmail || "",
+                  eventId: regData.eventId,
+                  eventName: regData.eventName,
+                  registrationDate: regData.registrationDate,
+                  status: regData.status,
+                };
+              }
+            );
+
+            // Only include events that have registrations for students
+            if (userType === "student" && registrations.length === 0) {
+              // Remove this event from the list if student has no registrations
+              setEvents(prevEvents => prevEvents.filter(e => e.id !== docSnap.id));
+              return;
+            }
+
+            const eventItem: Event = {
+              id: docSnap.id,
+              eventName: eventData.eventName || eventData.name || "",
+              attendees: eventData.attendees || 0,
+              registrations,
+              createdBy: eventData.createdBy || "",
+            };
+
+            // Update or add this event in the events array
+            setEvents(prevEvents => {
+              const existingIndex = prevEvents.findIndex(e => e.id === docSnap.id);
+              if (existingIndex >= 0) {
+                // Update existing event
+                const newEvents = [...prevEvents];
+                newEvents[existingIndex] = eventItem;
+                return newEvents;
+              } else {
+                // Add new event
+                return [...prevEvents, eventItem];
+              }
+            });
+
+            console.log(`Event ${docSnap.id} updated with ${registrations.length} registrations`);
+          }, (error) => {
+            console.error(`Error in registrations listener for event ${docSnap.id}:`, error);
+          });
+
+          registrationsUnsubscribes.push(registrationsUnsub);
+        });
+
+        console.log("Set up listeners for", eventsSnapshot.size, "events");
+      }, (error) => {
+        console.error("Error in events listener:", error);
         setEvents([]);
-      }
+      });
     };
 
-    fetchAllData();
-  }, []);
+    setupRealTimeListeners();
+
+    // Cleanup function
+    return () => {
+      console.log("Cleaning up Transactions listeners");
+      if (eventsUnsubscribe) eventsUnsubscribe();
+      registrationsUnsubscribes.forEach(unsub => unsub());
+    };
+  }, [userType, userData?.userId, userData?.email]);
 
   const renderEventOverview = ({ item }: { item: Event }) => {
     const totalRegistrations = item.registrations.length;
@@ -123,21 +220,33 @@ const Transactions = ({ userType = "organizer" }) => {
           <View style={styles.stat}>
             <Users width={16} height={16} style={styles.icon} />
             <Text style={styles.statText}>
-              {totalRegistrations}/{item.attendees} Registered
+              {userType === "student" 
+                ? `${totalRegistrations} registration${totalRegistrations !== 1 ? 's' : ''}`
+                : `${totalRegistrations}/${item.attendees} Registered`
+              }
             </Text>
           </View>
-          <View style={styles.stat}>
-            <Text style={styles.statText}>
-              {availableSpots} spots remaining
-            </Text>
-          </View>
+          {userType === "organizer" && (
+            <View style={styles.stat}>
+              <Text style={styles.statText}>
+                {availableSpots} spots remaining
+              </Text>
+            </View>
+          )}
         </View>
 
         {selectedEvent === item.id && (
           <View style={styles.registrationsList}>
-            <Text style={styles.registrationsTitle}>Attendees:</Text>
+            <Text style={styles.registrationsTitle}>
+              {userType === "student" ? "My Registrations:" : "Attendees:"}
+            </Text>
             {item.registrations.length === 0 ? (
-              <Text style={styles.noRegistrations}>No registrations yet</Text>
+              <Text style={styles.noRegistrations}>
+                {userType === "student" 
+                  ? "No registrations found" 
+                  : "No registrations yet"
+                }
+              </Text>
             ) : (
               item.registrations.map((registration) => (
                 <View key={registration.id} style={styles.registrationItem}>
@@ -148,6 +257,25 @@ const Transactions = ({ userType = "organizer" }) => {
                     <Text style={styles.attendeeEmail}>
                       {registration.attendeeEmail}
                     </Text>
+                    <View style={styles.registrationHeader}>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          styles.smallBadge,
+                          { backgroundColor: getStatusColor(registration.status) },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.statusText,
+                            styles.smallStatusText,
+                            { color: getStatusTextColor(registration.status) },
+                          ]}
+                        >
+                          {registration.status}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
               ))
@@ -190,12 +318,21 @@ const Transactions = ({ userType = "organizer" }) => {
 
   return (
     <View style={styles.container}>
-      {/* <Text style={styles.title}>Registration Transactions</Text> */}
       <FlatList
         data={events}
         renderItem={renderEventOverview}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>
+              {userType === "student" 
+                ? "You haven't registered for any events yet" 
+                : "No events created by you yet"
+              }
+            </Text>
+          </View>
+        }
       />
     </View>
   );
@@ -215,6 +352,17 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingBottom: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+  },
+  emptyText: {
+    color: "#64748b",
+    fontSize: 16,
+    textAlign: "center",
   },
   eventCard: {
     backgroundColor: "white",
@@ -306,7 +454,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginTop: 4,
   },
   attendeeName: {
     fontSize: 14,

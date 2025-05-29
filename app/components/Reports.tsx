@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Users, Calendar, TrendingUp, BarChart2 } from "react-native-feather";
-import { collection, query, getDocs } from "firebase/firestore";
-import { db } from "../../firebaseConfig"; // Adjust the path if your firebase config is elsewhere
+import { collection, query, onSnapshot, where } from "firebase/firestore";
+import { db } from "../../firebaseConfig";
 
 type PopularCategory = { name: string; count: number };
 type MonthlyStat = { month: string; events: number; attendees: number };
@@ -25,8 +25,10 @@ type Metrics = {
 // Helper function to calculate popular categories
 const calculatePopularCategories = (events: any[]): PopularCategory[] => {
   const categories = events.reduce((acc: Record<string, number>, event) => {
-    // Handle undefined or null eventType
-    const eventType = event.eventType?.toLowerCase() || "uncategorized";
+    // Handle different field names and undefined values
+    const eventType = event.eventType?.toLowerCase() || 
+                     event.category?.toLowerCase() || 
+                     "uncategorized";
     acc[eventType] = (acc[eventType] || 0) + 1;
     return acc;
   }, {});
@@ -85,7 +87,17 @@ const calculateMonthlyStats = (
     .sort((a, b) => a.month.localeCompare(b.month));
 };
 
-const Reports = ({ userType = "organizer" }) => {
+const Reports = ({ 
+  userType = "organizer",
+  userData
+}: {
+  userType?: "student" | "organizer";
+  userData?: {
+    userId?: string;
+    email?: string;
+    userType?: "student" | "organizer";
+  };
+}) => {
   const [metrics, setMetrics] = useState<Metrics>({
     totalEvents: 0,
     totalAttendees: 0,
@@ -97,59 +109,151 @@ const Reports = ({ userType = "organizer" }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchMetrics = async () => {
-      try {
-        setLoading(true);
-        const eventsRef = collection(db, "events");
-        const eventsSnap = await getDocs(eventsRef);
-        const registrationsSnap = await getDocs(
-          collection(db, "registrations")
+    console.log("=== REPORTS REAL-TIME SETUP ===");
+    console.log("userType:", userType);
+    console.log("userId:", userData?.userId);
+    console.log("email:", userData?.email);
+
+    let eventsUnsubscribe: (() => void) | null = null;
+    let registrationsUnsubscribe: (() => void) | null = null;
+
+    const setupRealTimeListeners = () => {
+      let eventsQuery;
+      let registrationsQuery;
+      
+      // Apply filtering based on user type (same as Events component)
+      if (userType === "organizer" && userData?.userId) {
+        console.log("Setting up reports for organizer events only");
+        eventsQuery = query(
+          collection(db, "events"),
+          where("createdBy", "==", userData.userId)
         );
+      } else {
+        console.log("Setting up reports for all events");
+        eventsQuery = collection(db, "events");
+      }
+
+      // Set up real-time listener for events
+      eventsUnsubscribe = onSnapshot(eventsQuery, (eventsSnapshot) => {
+        console.log("=== REPORTS EVENTS UPDATE ===");
+        console.log("Received", eventsSnapshot.size, "events for reports");
 
         type EventType = {
           id: string;
           attendees?: any[];
           eventType?: string;
+          category?: string;
           status?: string;
           date?: string;
+          createdBy?: string;
           [key: string]: any;
         };
 
-        const eventsData: EventType[] = eventsSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-
-        const registrationsData = registrationsSnap.docs.map((doc) =>
-          doc.data()
-        );
-
-        // Calculate metrics
-        const totalEvents = eventsData.length;
-        const totalAttendees = registrationsData.length;
-
-        setMetrics({
-          totalEvents,
-          totalAttendees,
-          averageAttendance:
-            totalEvents > 0
-              ? Math.round((totalAttendees / totalEvents) * 100) / 100
-              : 0,
-          upcomingEvents: eventsData.filter(
-            (e) => e.status?.toLowerCase() === "upcoming"
-          ).length,
-          popularCategories: calculatePopularCategories(eventsData),
-          monthlyStats: calculateMonthlyStats(eventsData, registrationsData),
+        const eventsData: EventType[] = eventsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          console.log("Report event:", doc.id, data.name || data.eventName);
+          return {
+            id: doc.id,
+            ...data,
+          };
         });
-      } catch (error) {
-        console.error("Error fetching metrics: ", error);
-      } finally {
+
+        // Set up registrations query based on events we have
+        const eventIds = eventsData.map(event => event.id);
+        
+        if (eventIds.length === 0) {
+          console.log("No events found, setting empty metrics");
+          setMetrics({
+            totalEvents: 0,
+            totalAttendees: 0,
+            averageAttendance: 0,
+            upcomingEvents: 0,
+            popularCategories: [],
+            monthlyStats: [],
+          });
+          setLoading(false);
+          return;
+        }
+
+        // For students, only show their own registrations
+        if (userType === "student" && userData?.email) {
+          registrationsQuery = query(
+            collection(db, "registrations"),
+            where("attendeeEmail", "==", userData.email)
+          );
+        } else {
+          // For organizers, show all registrations for their events
+          registrationsQuery = collection(db, "registrations");
+        }
+
+        // Set up real-time listener for registrations
+        if (registrationsUnsubscribe) {
+          registrationsUnsubscribe();
+        }
+
+        registrationsUnsubscribe = onSnapshot(registrationsQuery, (registrationsSnapshot) => {
+          console.log("=== REPORTS REGISTRATIONS UPDATE ===");
+          console.log("Received", registrationsSnapshot.size, "registrations for reports");
+
+          const allRegistrationsData = registrationsSnapshot.docs.map((doc) => doc.data());
+          
+          // Filter registrations to only include those for our events
+          const filteredRegistrationsData = allRegistrationsData.filter(reg => 
+            eventIds.includes(reg.eventId)
+          );
+
+          console.log("Filtered registrations:", filteredRegistrationsData.length);
+
+          // Calculate metrics
+          const totalEvents = eventsData.length;
+          const totalAttendees = filteredRegistrationsData.length;
+          const now = new Date();
+
+          const upcomingEvents = eventsData.filter((event) => {
+            if (!event.date) return false;
+            try {
+              const eventDate = new Date(event.date);
+              return eventDate >= now;
+            } catch {
+              return false;
+            }
+          }).length;
+
+          const newMetrics = {
+            totalEvents,
+            totalAttendees,
+            averageAttendance:
+              totalEvents > 0
+                ? Math.round((totalAttendees / totalEvents) * 100) / 100
+                : 0,
+            upcomingEvents,
+            popularCategories: calculatePopularCategories(eventsData),
+            monthlyStats: calculateMonthlyStats(eventsData, filteredRegistrationsData),
+          };
+
+          console.log("Updated metrics:", newMetrics);
+          setMetrics(newMetrics);
+          setLoading(false);
+        }, (error) => {
+          console.error("Error in registrations listener:", error);
+          setLoading(false);
+        });
+
+      }, (error) => {
+        console.error("Error in events listener:", error);
         setLoading(false);
-      }
+      });
     };
 
-    fetchMetrics();
-  }, []);
+    setupRealTimeListeners();
+
+    // Cleanup function
+    return () => {
+      console.log("Cleaning up Reports listeners");
+      if (eventsUnsubscribe) eventsUnsubscribe();
+      if (registrationsUnsubscribe) registrationsUnsubscribe();
+    };
+  }, [userType, userData?.userId, userData?.email]);
 
   if (loading) {
     return (
@@ -161,19 +265,25 @@ const Reports = ({ userType = "organizer" }) => {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Event Analytics</Text>
+      <Text style={styles.title}>
+        {userType === "organizer" ? "My Event Analytics" : "Event Analytics"}
+      </Text>
 
       <View style={styles.metricsGrid}>
         <View style={styles.metricCard}>
           <Calendar width={24} height={24} style={styles.metricIcon} />
           <Text style={styles.metricNumber}>{metrics.totalEvents}</Text>
-          <Text style={styles.metricLabel}>Total Events</Text>
+          <Text style={styles.metricLabel}>
+            {userType === "organizer" ? "My Events" : "Total Events"}
+          </Text>
         </View>
 
         <View style={styles.metricCard}>
           <Users width={24} height={24} style={styles.metricIcon} />
           <Text style={styles.metricNumber}>{metrics.totalAttendees}</Text>
-          <Text style={styles.metricLabel}>Total Attendees</Text>
+          <Text style={styles.metricLabel}>
+            {userType === "organizer" ? "My Attendees" : "Total Attendees"}
+          </Text>
         </View>
 
         <View style={styles.metricCard}>
@@ -201,7 +311,12 @@ const Reports = ({ userType = "organizer" }) => {
             </View>
           ))
         ) : (
-          <Text style={styles.emptyText}>No categories data available</Text>
+          <Text style={styles.emptyText}>
+            {userType === "organizer" 
+              ? "No events created yet" 
+              : "No categories data available"
+            }
+          </Text>
         )}
       </View>
 
@@ -217,7 +332,12 @@ const Reports = ({ userType = "organizer" }) => {
           ))
         ) : (
           <View style={styles.monthlyCard}>
-            <Text style={styles.emptyText}>No monthly data available</Text>
+            <Text style={styles.emptyText}>
+              {userType === "organizer" 
+                ? "No events data yet" 
+                : "No monthly data available"
+              }
+            </Text>
           </View>
         )}
       </ScrollView>

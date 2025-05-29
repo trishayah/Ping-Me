@@ -123,7 +123,7 @@ function AuthenticatedTabs({
       {isOrganizer && (
         <Tab.Screen
           name="Reports"
-          children={(props) => <Reports {...props} userData={userData} />}
+          children={(props) => <Reports {...props} userType={userData.userType} />}
           initialParams={{ name: "Reports" }}
           options={{
             headerTitle: () => <HeaderTitle text="Reports" />,
