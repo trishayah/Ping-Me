@@ -73,7 +73,7 @@ const Homepage: React.FC<HomepageProps> = ({ userType = "student", navigation })
           />
           <View>
             <Text style={styles.welcome}>Welcome back,</Text>
-            <Text style={styles.userName}>John Doe</Text>
+            <Text style={styles.userName}>{userEmail || "User"}</Text>
           </View>
         </View>
         <TouchableOpacity>

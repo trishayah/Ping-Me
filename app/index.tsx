@@ -1,6 +1,7 @@
 import { Text, View, StyleSheet} from "react-native";
 // import Home from "./(tabs)/Home";
 import AddEvent from "./components/AddEvent";
+import Homepage from "./components/Homepage";
 
 
 export default function Index() {

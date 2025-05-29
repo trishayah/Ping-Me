@@ -327,7 +327,7 @@ import { firebaseApp } from '../../firebaseConfig'; // Adjust the path as necess
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView
+  StyleSheet, ScrollView, KeyboardAvoidingView
 } from 'react-native';
 import { UserPlus, ChevronLeft } from 'lucide-react-native';
 
@@ -367,14 +367,19 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack }) => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <ChevronLeft size={24} color="#6200ee" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Account</Text>
-        <View style={styles.headerPlaceholder} />
-      </View>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+    >
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <ChevronLeft size={24} color="#6200ee" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Create Account</Text>
+          <View style={styles.headerPlaceholder} />
+        </View>
 
       <View style={styles.content}>
         <Text style={styles.welcomeSubtitle}>
@@ -478,17 +483,18 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack }) => {
             <Text style={styles.buttonText}>Create Account</Text>
           </TouchableOpacity>
 
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>
-              Already have an account?{' '}
-              <Text style={styles.loginLink} onPress={onBack}>
-                Log in
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>
+                Already have an account?{' '}
+                <Text style={styles.loginLink} onPress={onBack}>
+                  Log in
+                </Text>
               </Text>
-            </Text>
+            </View>
           </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+      </KeyboardAvoidingView>
   );
 };
 

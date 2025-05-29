@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import type { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+
+import { StyleProp, TextStyle, ViewStyle } from 'react-native';
 
 type DatePickerProps = {
   value?: Date;
   onDateChange?: (date: Date) => void;
   placeholder?: string;
-  style?: object;
-  textStyle?: object;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   minimumDate?: Date;
   maximumDate?: Date;
+  mode?: 'date' | 'datetime' | 'time';
   disabled?: boolean;
-  mode?: "date" | "datetime" | "time";
 };
 
 const DatePicker: React.FC<DatePickerProps> = ({ 
@@ -22,74 +25,50 @@ const DatePicker: React.FC<DatePickerProps> = ({
   textStyle,
   minimumDate,
   maximumDate,
-  disabled = false,
-  mode = "date" // "date", "datetime", "time"
+  mode = "date",
+  disabled = false 
 }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-
-const handleDateChange = (
-    event: DateTimePickerEvent,
+  const handleDateChange = (
+    event: DateTimePickerEvent, 
     selectedDate?: Date | undefined
-): void => {
+  ): void => {
     setShowDatePicker(false);
-    
+
     // Only update if user didn't cancel (event.type !== 'dismissed')
-    if (event.type !== 'dismissed' && selectedDate && onDateChange) {
-        onDateChange(selectedDate);
+    if (event.type === 'set' && selectedDate && onDateChange) {
+      onDateChange(selectedDate);
     }
-};
+  };
 
-interface FormatDateOptions {
-    year: 'numeric';
-    month: 'long';
-    day: 'numeric';
-}
+  interface FormatDate {
+    (date: Date | undefined): string;
+  }
 
-const formatDate = (date: Date | undefined, placeholder?: string): string => {
-    if (!date) return placeholder ?? '';
-    
-    const options: FormatDateOptions = { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-    };
-    
-    return date.toLocaleDateString([], options);
-};
+  const formatDate: FormatDate = (date) => {
+    if (!date) return placeholder;
 
-interface FormatDateTimeOptions {
-    year: 'numeric';
-    month: 'short';
-    day: 'numeric';
-}
-
-interface FormatTimeOptions {
-    hour: '2-digit';
-    minute: '2-digit';
-}
-
-const formatDateTime = (date: Date | undefined, placeholder?: string): string => {
-    if (!date) return placeholder ?? '';
-
-    const dateOptions: FormatDateTimeOptions = { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
-    };
-    const timeOptions: FormatTimeOptions = { 
+    if (mode === 'datetime') {
+      return date.toLocaleString([], { 
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
         hour: '2-digit', 
-        minute: '2-digit' 
-    };
-
-    return `${date.toLocaleDateString([], dateOptions)} at ${date.toLocaleTimeString([], timeOptions)}`;
-};
-
-  const getDisplayText = () => {
-    if (mode === "datetime") {
-      return formatDateTime(value, placeholder);
+        minute: '2-digit'
+      });
+    } else if (mode === 'time') {
+      return date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    } else {
+      return date.toLocaleDateString([], { 
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
     }
-    return formatDate(value), placeholder;
   };
 
   return (
@@ -105,7 +84,7 @@ const formatDateTime = (date: Date | undefined, placeholder?: string): string =>
           !value && styles.placeholder,
           disabled && styles.disabledText
         ]}>
-          {getDisplayText()}
+          {formatDate(value)}
         </Text>
       </TouchableOpacity>
 
@@ -114,9 +93,9 @@ const formatDateTime = (date: Date | undefined, placeholder?: string): string =>
           value={value || new Date()}
           mode={mode}
           display="default"
-          onChange={handleDateChange}
           minimumDate={minimumDate}
           maximumDate={maximumDate}
+          onChange={handleDateChange}
         />
       )}
     </View>
