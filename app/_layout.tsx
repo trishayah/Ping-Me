@@ -28,7 +28,7 @@ const EventsStack = createNativeStackNavigator();
 //   </View>
 // );
 
-function EventsStackScreen({ userType }) {
+function EventsStackScreen({ userType }: { userType: "student" | "organizer" }) {
   return (
     <EventsStack.Navigator>
       <EventsStack.Screen name="EventsMain" options={{ headerShown: false }}>
@@ -209,6 +209,7 @@ export default function RootLayout() {
     return <LoginPage onLogin={handleLogin} onSignup={handleSignup} />;
   }
 
+  if (!userData) return null;
   return <AuthenticatedTabs userData={userData} onLogout={handleLogout} />;
 }
 
