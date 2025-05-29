@@ -28,7 +28,7 @@ const EventsStack = createNativeStackNavigator();
 //   </View>
 // );
 
-function EventsStackScreen({ userType }) {
+function EventsStackScreen({ userType }: { userType: "student" | "organizer" }) {
   return (
     <EventsStack.Navigator
       screenOptions={{
@@ -55,7 +55,7 @@ function AuthenticatedTabs({
   onLogout,
 }: {
   userData: {
-    userType: string;
+    userType: "student" | "organizer";
     email: string;
     firstName: string;
     userName: string;
@@ -125,7 +125,12 @@ function AuthenticatedTabs({
       <Tab.Screen
         name="Profile"
         children={(props) => (
-          <Profile {...props} userData={userData} onLogout={onLogout} />
+          <Profile
+            onLogout={onLogout}
+            onLogin={
+              (email, password, userType, firstName, lastName, createdAt) => {}
+            }
+          />
         )}
         initialParams={{ name: "Profile" }}
         options={{
@@ -216,6 +221,7 @@ export default function RootLayout() {
     return <LoginPage onLogin={handleLogin} onSignup={handleSignup} />;
   }
 
+  if (!userData) return null;
   return <AuthenticatedTabs userData={userData} onLogout={handleLogout} />;
 }
 
