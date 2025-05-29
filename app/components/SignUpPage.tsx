@@ -138,6 +138,8 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
+    <KeyboardAvoidingView style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <ChevronLeft size={24} color="#6200ee" />
@@ -154,6 +156,11 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
               : "discover amazing events"}
           </Text>
 
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
           {error ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
@@ -209,6 +216,15 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
               placeholderTextColor="#9ca3af"
               editable={!loading}
             />
+            <Text style={styles.label}>First Name</Text>
+            <TextInput
+              style={styles.input}
+              value={fname}
+              onChangeText={setFname}
+              placeholder="Enter your first name"
+              placeholderTextColor="#9ca3af"
+              editable={!loading}
+            />
 
             <Text style={styles.label}>Last Name</Text>
             <TextInput
@@ -219,7 +235,27 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
               placeholderTextColor="#9ca3af"
               editable={!loading}
             />
+            <Text style={styles.label}>Last Name</Text>
+            <TextInput
+              style={styles.input}
+              value={lname}
+              onChangeText={setLname}
+              placeholder="Enter your last name"
+              placeholderTextColor="#9ca3af"
+              editable={!loading}
+            />
 
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
+              placeholderTextColor="#9ca3af"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
+            />
             <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
@@ -242,7 +278,27 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
               secureTextEntry
               editable={!loading}
             />
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Create a password (min. 8 characters)"
+              placeholderTextColor="#9ca3af"
+              secureTextEntry
+              editable={!loading}
+            />
 
+            <Text style={styles.label}>Confirm Password</Text>
+            <TextInput
+              style={styles.input}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Re-enter your password"
+              placeholderTextColor="#9ca3af"
+              secureTextEntry
+              editable={!loading}
+            />
             <Text style={styles.label}>Confirm Password</Text>
             <TextInput
               style={styles.input}
@@ -294,6 +350,7 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
           </View>
         </View>
       </ScrollView>
+    </KeyboardAvoidingView>
     </KeyboardAvoidingView>
   );
 };

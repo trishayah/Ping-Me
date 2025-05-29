@@ -15,7 +15,7 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
-import { firebaseApp, firestoreDb } from "../../firebaseConfig";
+import { firebaseApp } from "../../firebaseConfig";
 
 const db = getFirestore(firebaseApp);
 

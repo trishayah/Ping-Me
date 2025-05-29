@@ -6,84 +6,176 @@ import {
   FlatList,
   TouchableOpacity,
 } from "react-native";
-import { Check, X, Calendar, Users } from "react-native-feather";
-import { collection, query, onSnapshot } from "firebase/firestore";
-import { firebaseApp, db } from "../../firebaseConfig"; 
+import { Calendar, Users, User } from "react-native-feather";
+import { collection, query, onSnapshot, where } from "firebase/firestore";
+import { firebaseApp, db } from "../../firebaseConfig";
 
-type Transaction = {
+type Registration = {
   id: string;
-  eventName?: string;
-  status?: string;
-  date?: string | number | Date;
-  attendees?: number;
-  registered?: number;
-  // Add other fields as needed based on your Firestore data
+  attendeeName: string;
+  attendeeEmail: string;
+  eventId: string;
+  eventName: string;
+  registrationDate: string | number | Date;
+  status: 'confirmed' | 'pending' | 'cancelled' | 'no-show';
+};
+
+type Event = {
+  id: string;
+  eventName: string;
+  attendees: number; // max capacity
+  registrations: Registration[];
 };
 
 const Transactions = ({ userType = "organizer" }) => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, "transactions"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const transactionsData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setTransactions(transactionsData);
+    // Listen to events collection
+    const eventsQuery = query(collection(db, "events"));
+    const unsubscribeEvents = onSnapshot(eventsQuery, async (querySnapshot) => {
+      const eventsData = await Promise.all(
+        querySnapshot.docs.map(async (doc) => {
+          const eventData = { id: doc.id, ...doc.data() } as any;
+          
+          // Get registrations for this event
+          const registrationsQuery = query(
+            collection(db, "registrations"),
+            where("eventId", "==", doc.id)
+          );
+          
+          return new Promise<Event>((resolve) => {
+            onSnapshot(registrationsQuery, (regSnapshot) => {
+              const registrations = regSnapshot.docs.map((regDoc) => ({
+                id: regDoc.id,
+                ...regDoc.data(),
+              })) as Registration[];
+              
+              resolve({
+                id: eventData.id,
+                eventName: eventData.eventName,
+                attendees: eventData.attendees,
+                registrations,
+              });
+            });
+          });
+        })
+      );
+      
+      setEvents(eventsData);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeEvents();
   }, []);
 
-  const renderTransaction = ({ item }: { item: Transaction }) => (
-    <View style={styles.transactionCard}>
-      <View style={styles.transactionHeader}>
-        <Text style={styles.eventName}>{item.eventName}</Text>
-        <View
-          style={[
+  const renderEventOverview = ({ item }: { item: Event }) => {
+    const totalRegistrations = item.registrations.length;
+    const availableSpots = item.attendees - totalRegistrations;
+    const confirmedRegistrations = item.registrations.filter(r => r.status === 'confirmed').length;
+
+    return (
+      <TouchableOpacity 
+        style={styles.eventCard}
+        onPress={() => setSelectedEvent(selectedEvent === item.id ? null : item.id)}
+      >
+        <View style={styles.eventHeader}>
+          <Text style={styles.eventName}>{item.eventName}</Text>
+          <View style={[
             styles.statusBadge,
-            {
-              backgroundColor:
-                item.status === "confirmed" ? "#dcfce7" : "#fee2e2",
-            },
-          ]}
-        >
-          <Text
-            style={[
+            { backgroundColor: availableSpots > 0 ? "#dcfce7" : "#fee2e2" }
+          ]}>
+            <Text style={[
               styles.statusText,
-              { color: item.status === "confirmed" ? "#166534" : "#991b1b" },
-            ]}
-          >
-            {item.status === "confirmed" ? "Confirmed" : "Cancelled"}
-          </Text>
+              { color: availableSpots > 0 ? "#166534" : "#991b1b" }
+            ]}>
+              {availableSpots > 0 ? "Open" : "Full"}
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.detailsRow}>
-        <Calendar width={16} height={16} style={styles.icon} />
-        <Text style={styles.detailText}>
-          {item.date ? new Date(item.date).toLocaleDateString() : "No date"}
-        </Text>
-      </View>
-
-      <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Users width={16} height={16} style={styles.icon} />
-          <Text style={styles.statText}>
-            {item.attendees}/{item.registered} Attended
-          </Text>
+        <View style={styles.overviewStats}>
+          <View style={styles.stat}>
+            <Users width={16} height={16} style={styles.icon} />
+            <Text style={styles.statText}>
+              {totalRegistrations}/{item.attendees} Registered
+            </Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statText}>
+              {availableSpots} spots remaining
+            </Text>
+          </View>
         </View>
-      </View>
-    </View>
-  );
+
+        {selectedEvent === item.id && (
+          <View style={styles.registrationsList}>
+            <Text style={styles.registrationsTitle}>Registrations:</Text>
+            {item.registrations.length === 0 ? (
+              <Text style={styles.noRegistrations}>No registrations yet</Text>
+            ) : (
+              item.registrations.map((registration) => (
+                <View key={registration.id} style={styles.registrationItem}>
+                  <View style={styles.registrationInfo}>
+                    <View style={styles.registrationHeader}>
+                      <Text style={styles.attendeeName}>{registration.attendeeName}</Text>
+                      <View style={[
+                        styles.statusBadge,
+                        styles.smallBadge,
+                        { backgroundColor: getStatusColor(registration.status) }
+                      ]}>
+                        <Text style={[
+                          styles.statusText,
+                          styles.smallStatusText,
+                          { color: getStatusTextColor(registration.status) }
+                        ]}>
+                          {registration.status}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.attendeeEmail}>{registration.attendeeEmail}</Text>
+                    <View style={styles.registrationDate}>
+                      <Calendar width={14} height={14} style={styles.smallIcon} />
+                      <Text style={styles.dateText}>
+                        Registered: {new Date(registration.registrationDate).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'confirmed': return "#dcfce7";
+      case 'pending': return "#fef3c7";
+      case 'cancelled': return "#fee2e2";
+      case 'no-show': return "#f3f4f6";
+      default: return "#f3f4f6";
+    }
+  };
+
+  const getStatusTextColor = (status: string) => {
+    switch (status) {
+      case 'confirmed': return "#166534";
+      case 'pending': return "#92400e";
+      case 'cancelled': return "#991b1b";
+      case 'no-show': return "#4b5563";
+      default: return "#4b5563";
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Event Registrations</Text>
+      <Text style={styles.title}>Registration Transactions</Text>
       <FlatList
-        data={transactions}
-        renderItem={renderTransaction}
+        data={events}
+        renderItem={renderEventOverview}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
       />
@@ -106,7 +198,7 @@ const styles = StyleSheet.create({
   list: {
     paddingBottom: 16,
   },
-  transactionCard: {
+  eventCard: {
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
@@ -117,7 +209,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  transactionHeader: {
+  eventHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -134,19 +226,21 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
+  smallBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   statusText: {
     fontSize: 12,
     fontWeight: "500",
   },
-  detailsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
+  smallStatusText: {
+    fontSize: 10,
   },
-  statsRow: {
+  overviewStats: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 8,
+    marginBottom: 8,
   },
   stat: {
     flexDirection: "row",
@@ -156,13 +250,64 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginRight: 6,
   },
-  detailText: {
+  smallIcon: {
     color: "#64748b",
-    fontSize: 14,
+    marginRight: 4,
   },
   statText: {
     color: "#64748b",
     fontSize: 14,
+  },
+  registrationsList: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
+  registrationsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 12,
+  },
+  noRegistrations: {
+    color: "#64748b",
+    fontSize: 14,
+    textAlign: "center",
+    paddingVertical: 16,
+  },
+  registrationItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  registrationInfo: {
+    flex: 1,
+  },
+  registrationHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  attendeeName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1e293b",
+    flex: 1,
+  },
+  attendeeEmail: {
+    fontSize: 12,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  registrationDate: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  dateText: {
+    fontSize: 12,
+    color: "#64748b",
   },
 });
 
