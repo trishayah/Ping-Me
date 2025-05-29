@@ -9,14 +9,17 @@ import Transactions from "./components/Transactions";
 import Profile from "./components/Profile";
 import Reports from "./components/Reports";
 import Homepage from "./components/Homepage";
+import AddEvent from "./components/AddEvent"; // Create this file if it doesn't exist
 
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import Entypo from "react-native-vector-icons/Entypo";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
 const Tab = createBottomTabNavigator();
+const EventsStack = createNativeStackNavigator();
 
 // Temporary debugging component to isolate the issue
 // const DebugComponent = ({ route }: { route: any }) => (
@@ -24,6 +27,21 @@ const Tab = createBottomTabNavigator();
 //     <Text>{route.params?.name ?? "Unknown"} - Debug Mode</Text>
 //   </View>
 // );
+
+function EventsStackScreen({ userType }) {
+  return (
+    <EventsStack.Navigator>
+      <EventsStack.Screen name="EventsMain" options={{ headerShown: false }}>
+        {(props) => <EventsPage {...props} userType={userType} />}
+      </EventsStack.Screen>
+      <EventsStack.Screen
+        name="AddEvent"
+        component={AddEvent}
+        options={{ title: "Add Event" }}
+      />
+    </EventsStack.Navigator>
+  );
+}
 
 function AuthenticatedTabs({
   userData,
@@ -58,8 +76,7 @@ function AuthenticatedTabs({
       />
       <Tab.Screen
         name="Events"
-        children={(props) => <EventsPage {...props} userData={userData} />}
-        initialParams={{ name: "Events" }}
+        children={() => <EventsStackScreen userType={userData.userType} />}
         options={{
           headerTitle: () => <HeaderTitle text="Events" />,
           tabBarIcon: ({ color }) => (
