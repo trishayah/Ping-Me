@@ -1,3 +1,4 @@
+// components/LoginPage.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -5,9 +6,9 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator, // Added for loading indicator
 } from "react-native";
 import { LogIn } from "lucide-react-native";
-import { useRouter } from "expo-router";
 import {
   getFirestore,
   collection,
@@ -15,12 +16,19 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
-import { firebaseApp } from "../../firebaseConfig";
+import { firebaseApp } from "../../firebaseConfig"; // Ensure this path is correct
 
 const db = getFirestore(firebaseApp);
 
 interface LoginPageProps {
-  onLogin: (email: string, password: string, userType: "student" | "organizer", firstName: string) => void;
+  // Now includes userId in the onLogin callback
+  onLogin: (
+    userId: string, // <-- Added userId here
+    email: string,
+    password: string,
+    userType: "student" | "organizer",
+    firstName: string
+  ) => void;
   onSignup: () => void;
 }
 
@@ -28,13 +36,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const router = useRouter();
+  const [loading, setLoading] = useState(false); // Added loading state
 
   const handleSubmit = async () => {
     if (!email || !password) {
       setError("Please enter both email and password");
       return;
     }
+
+    setLoading(true); // Start loading
+    setError(""); // Clear previous errors
 
     try {
       const accountsRef = collection(db, "accounts");
@@ -49,17 +60,22 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
       const userDoc = querySnapshot.docs[0];
       const userData = userDoc.data();
 
+      // IMPORTANT: In a real app, never store plain passwords.
+      // You should compare a hashed password from your backend.
       if (userData.password !== password) {
         setError("Invalid email or password");
         return;
       }
 
-      setError("");
-      onLogin(email, password, userData.userType, userData.firstName);
+      // Successful login
+      // Pass the Firestore document ID (userId) along with other data
+      onLogin(userDoc.id, email, password, userData.userType, userData.firstName);
 
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false); // End loading
     }
   };
 
@@ -101,9 +117,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
             secureTextEntry
           />
 
-          <TouchableOpacity style={styles.loginButton} onPress={handleSubmit}>
-            <LogIn size={18} color="white" style={styles.loginIcon} />
-            <Text style={styles.ButtonText}>Log In</Text>
+          <TouchableOpacity style={styles.loginButton} onPress={handleSubmit} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <LogIn size={18} color="white" style={styles.loginIcon} />
+                <Text style={styles.ButtonText}>Log In</Text>
+              </>
+            )}
           </TouchableOpacity>
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>
@@ -117,7 +139,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSignup }) => {
       </View>
     </View>
   );
-};
+  };
 
 const styles = StyleSheet.create({
   container: {
@@ -206,4 +228,5 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 });
+
 export default LoginPage;

@@ -8,7 +8,7 @@ import {
   Shield, GraduationCap, Users 
 } from 'lucide-react-native';
 import { db } from '../../firebaseConfig';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 interface UserProfile {
   id: string;
@@ -23,11 +23,21 @@ interface UserProfile {
 }
 
 interface ProfileProps {
+  userId: string;
   onLogin: (email: string, password: string, userType: string, firstName: string, lastName: string, createdAt: Date) => void;
   onLogout: () => void;
 }
 
-export default function Profile({ onLogout }: ProfileProps) {
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+};
+
+export default function Profile({ userId, onLogout }: ProfileProps) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -37,28 +47,12 @@ export default function Profile({ onLogout }: ProfileProps) {
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
 
-
-  const getCurrentUserId = async () => {
-    try {
-      const q = query(collection(db, 'accounts'));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        return querySnapshot.docs[0].id;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting user ID:', error);
-      return null;
-    }
-  };
-
   const loadUserProfile = async () => {
     try {
       setLoading(true);
-      const userId = await getCurrentUserId();
       
       if (!userId) {
-        Alert.alert('Error', 'User not found. Please log in again.');
+        Alert.alert('Error', 'User ID not provided.');
         return;
       }
 
@@ -67,6 +61,10 @@ export default function Profile({ onLogout }: ProfileProps) {
       if (userDoc.exists()) {
         const userData = { id: userDoc.id, ...userDoc.data() } as UserProfile;
         setUser(userData);
+
+        if (userData.createdAt && (userData.createdAt as any).toDate) {
+          userData.createdAt = (userData.createdAt as any).toDate().toISOString();
+        }
         
         // Set editable fields
         setEditFirstName(userData.firstName);
@@ -117,18 +115,11 @@ export default function Profile({ onLogout }: ProfileProps) {
     setEditing(false);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
   useEffect(() => {
-    loadUserProfile();
-  }, []);
+    if (userId) {
+      loadUserProfile();
+    }
+  }, [userId]);
 
   if (loading) {
     return (
@@ -248,6 +239,21 @@ export default function Profile({ onLogout }: ProfileProps) {
             <Text style={styles.infoText}>{formatDate(user.createdAt)}</Text>
           </View>
         </View>
+        
+        {/* Display User ID */}
+        <View style={styles.infoItem}>
+          <Users size={20} color="#666" />
+          <View>
+            <Text style={styles.infoLabel}>User ID</Text>
+            <Text style={styles.infoText}>{userId}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <TouchableOpacity onPress={onLogout} style={styles.logoutButton}>
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -440,5 +446,16 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+  },
+  logoutButton: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  logoutText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

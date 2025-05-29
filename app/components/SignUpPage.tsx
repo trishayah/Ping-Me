@@ -28,7 +28,7 @@ const db = getFirestore(firebaseApp);
 
 interface SignUpPageProps {
   onBack: () => void;
-  onSignupSuccess: (email: string, userType: "student" | "organizer", firstName: string) => void;
+  onSignupSuccess: (userId: string, email: string, userType: "student" | "organizer", firstName: string) => void;
 }
 
 const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
@@ -89,44 +89,45 @@ const SignUpPage: React.FC<SignUpPageProps> = ({ onBack, onSignupSuccess }) => {
         return;
       }
 
-      // Store user data in Firestore accounts collection
-      await addDoc(collection(db, "accounts"), {
-        userType: userType,
-        firstName: fname.trim(),
-        lastName: lname.trim(),
-        email: email.toLowerCase().trim(),
-        password: password, 
-        createdAt: serverTimestamp(),
-        displayName: `${fname.trim()} ${lname.trim()}`,
-      });
+  // Store user data in Firestore accounts collection
+  const docRef = await addDoc(collection(db, "accounts"), {
+    userType: userType,
+    firstName: fname.trim(),
+    lastName: lname.trim(),
+    email: email.toLowerCase().trim(),
+    password: password, 
+    createdAt: serverTimestamp(),
+    displayName: `${fname.trim()} ${lname.trim()}`,
+  });
 
-      // Clear the form
-      setUserType("");
-      setFname("");
-      setLname("");
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
+  // Clear the form
+  setUserType("");
+  setFname("");
+  setLname("");
+  setEmail("");
+  setPassword("");
+  setConfirmPassword("");
 
-      // // Success alert with navigation to homepage
-      // Alert.alert("Success!", "Your account has been created successfully.", [
-      //   {
-      //     text: "OK",
-      //     onPress: () => {
-      //       // Navigate to homepage
-      //       navigation.reset({
-      //         index: 0,
-      //         routes: [{ name: "Home" }],
-      //       });
-      //     },
-      //   },
-      // ]);
-      console.log("[SignUpPage] Calling onSignupSuccess with:", {
-      email: email.toLowerCase().trim(),
-      userType,
-      firstName: fname.trim()
-   });
-   onSignupSuccess(email.toLowerCase().trim(), userType as "student" | "organizer", fname.trim());
+  // // Success alert with navigation to homepage
+  // Alert.alert("Success!", "Your account has been created successfully.", [
+  //   {
+  //     text: "OK",
+  //     onPress: () => {
+  //       // Navigate to homepage
+  //       navigation.reset({
+  //         index: 0,
+  //         routes: [{ name: "Home" }],
+  //       });
+  //     },
+  //   },
+  // ]);
+  console.log("[SignUpPage] Calling onSignupSuccess with:", {
+    userId: docRef.id,
+    email: email.toLowerCase().trim(),
+    userType,
+    firstName: fname.trim()
+  });
+  onSignupSuccess(docRef.id, email.toLowerCase().trim(), userType as "student" | "organizer", fname.trim());
 
     } catch (error: any) {
       console.error("Signup error:", error);
