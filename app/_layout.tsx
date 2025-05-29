@@ -120,9 +120,12 @@ export default function RootLayout() {
     setAppState("login");
   };
 
-  // Add this handler for successful signup
   const handleSignupSuccess = () => {
     setAppState("authenticated");
+  };
+
+  const handleLogout = () => {
+    setAppState("login");
   };
 
   if (appState === "loading") {
@@ -130,17 +133,19 @@ export default function RootLayout() {
   }
 
   if (appState === "signup") {
-    // Pass the success handler to SignUpPage
-    return <SignUpPage onBack={handleBackToLogin} onSignupSuccess={handleSignupSuccess} />;
+    return (
+      <SignUpPage onBack={handleBackToLogin} onSignupSuccess={handleSignupSuccess} />
+    );
   }
 
   if (appState === "login") {
     return <LoginPage onLogin={handleLogin} onSignup={handleSignup} />;
   }
 
-  // Authenticated views — show tab navigator
+  // Pass logout handler to authenticated tabs
   return <AuthenticatedTabs />;
 }
+
 
 // Custom header title with safety check
 const HeaderTitle = ({ text }: { text?: string }) => (

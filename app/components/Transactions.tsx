@@ -172,7 +172,7 @@ const Transactions = ({ userType = "organizer" }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Registration Transactions</Text>
+      {/* <Text style={styles.title}>Registration Transactions</Text> */}
       <FlatList
         data={events}
         renderItem={renderEventOverview}
