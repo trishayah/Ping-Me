@@ -220,7 +220,7 @@ const Events = ({
               style={styles.addButton}
               onPress={() => {
                 console.log("Add button pressed");
-                navigation.navigate("AddEvent");
+                navigation.navigate('AddEvent');
               }}
             >
               <Plus width={22} height={22} color={styles.addIcon.color} />
