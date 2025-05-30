@@ -52,8 +52,10 @@ type EventData = {
   eventAttendees?: any[];
   eventImage?: { uri: string } | null;
   createdBy?: string;
-  isDeleted?: boolean; // Add soft delete flag
-  deletedAt?: string; // Add deletion timestamp
+  isDeleted?: boolean;
+  deletedAt?: string;
+  maxCapacity?: number; // Add max capacity field
+  currentAttendees?: number; // Add current attendees count
 };
 
 const Events = ({
@@ -103,13 +105,20 @@ const Events = ({
       const querySnapshot = await getDocs(eventsQuery);
       const fetchedEvents: EventData[] = [];
       
+      // Also fetch registrations to get accurate attendee counts
+      const registrationsSnapshot = await getDocs(collection(db, "registrations"));
+      const registrationsData = registrationsSnapshot.docs.map(doc => doc.data());
+      
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         console.log("Event data:", data);
         
         // Filter out soft-deleted events for display
-        // But keep them in Firestore for transaction history
         if (!data.isDeleted) {
+          // Count current registrations for this event
+          const eventRegistrations = registrationsData.filter(reg => reg.eventId === doc.id);
+          const currentAttendees = eventRegistrations.length;
+          
           fetchedEvents.push({
             id: doc.id,
             eventName: data.name || "",
@@ -123,6 +132,8 @@ const Events = ({
             createdBy: data.createdBy || "",
             isDeleted: data.isDeleted || false,
             deletedAt: data.deletedAt || null,
+            maxCapacity: data.maxCapacity || data.attendees || 50, // Use maxCapacity or fallback to attendees field
+            currentAttendees: currentAttendees, // Set actual current attendees count
           });
         }
       });
@@ -163,7 +174,29 @@ const Events = ({
   const userEmail = userData?.email || "";
   const userName = userData?.firstName || "";
 
+  // Helper function to check if event is full
+  const isEventFull = (event: EventData): boolean => {
+    return (event.currentAttendees || 0) >= (event.maxCapacity || 0);
+  };
+
+  // Helper function to check if user is already registered
+  const isUserRegistered = (eventId: string): boolean => {
+    return rsvpedEvents.includes(eventId);
+  };
+
   const handleRSVP: HandleRSVP = async (eventId) => {
+    const event = events.find((ev) => ev.id === eventId);
+    if (!event) return;
+
+    // Check if event is full before allowing RSVP
+    if (isEventFull(event) && !isUserRegistered(eventId)) {
+      Alert.alert(
+        "Event Full",
+        "Sorry, this event has reached its maximum capacity and is no longer accepting registrations."
+      );
+      return;
+    }
+
     if (rsvpedEvents.includes(eventId)) {
       setRsvpedEvents(rsvpedEvents.filter((id) => id !== eventId));
       // Optionally: remove RSVP from Firestore here if needed
@@ -176,9 +209,6 @@ const Events = ({
 
       // Store RSVP in Firestore (registrations collection)
       try {
-        const event = events.find((ev) => ev.id === eventId);
-        if (!event) return;
-
         await addDoc(collection(db, "registrations"), {
           eventId: event.id,
           eventName: event.eventName,
@@ -188,16 +218,11 @@ const Events = ({
           status: "confirmed",
         });
 
-        // Optionally update event's attendees count in Firestore
+        // Update event's attendees count in Firestore
         const eventDocRef = doc(db, "events", event.id);
-        let newAttendees = 1;
-        if (Array.isArray(event.eventAttendees)) {
-          newAttendees = event.eventAttendees.length + 1;
-        } else if (typeof event.eventAttendees === "number") {
-          newAttendees = event.eventAttendees + 1;
-        }
+        const newAttendeeCount = (event.currentAttendees || 0) + 1;
         await updateDoc(eventDocRef, {
-          attendees: newAttendees,
+          attendees: newAttendeeCount,
         });
 
         await fetchEvents(); // Refresh events after RSVP
@@ -344,7 +369,6 @@ const Events = ({
       setEditLoading(false);
     };
 
-    // Modified delete function to implement soft delete
     const handleDelete = async () => {
       Alert.alert(
         "Delete Event",
@@ -357,12 +381,11 @@ const Events = ({
             onPress: async () => {
               setEditLoading(true);
               try {
-                // Soft delete: mark as deleted instead of removing from database
                 const eventRef = doc(db, "events", event.id);
                 await updateDoc(eventRef, {
                   isDeleted: true,
                   deletedAt: new Date().toISOString(),
-                  deletedBy: userData?.userId, // Track who deleted it
+                  deletedBy: userData?.userId,
                 });
                 
                 if (refreshEvents) refreshEvents();
@@ -386,30 +409,60 @@ const Events = ({
     const canEditEvent = userType === "organizer" && 
                         event.createdBy === userData?.userId;
 
+    // Check if event is full
+    const eventIsFull = isEventFull(event);
+    const userIsRegistered = isAttending;
+
+    // Determine RSVP button state
+    const getRSVPButtonState = () => {
+      if (userIsRegistered) {
+        return {
+          text: "Attending",
+          disabled: false,
+          style: styles.rsvpButtonActive,
+          textStyle: styles.rsvpButtonTextActive,
+        };
+      } else if (eventIsFull) {
+        return {
+          text: "Event Full",
+          disabled: true,
+          style: styles.rsvpButtonDisabled,
+          textStyle: styles.rsvpButtonTextDisabled,
+        };
+      } else {
+        return {
+          text: "RSVP",
+          disabled: false,
+          style: styles.rsvpButton,
+          textStyle: styles.rsvpButtonText,
+        };
+      }
+    };
+
+    const rsvpButtonState = getRSVPButtonState();
+
     const detailsContent = (
       <View style={styles.detailsContent}>
         <View style={styles.detailsActionRow}>
           <View style={styles.attendingContainer}>
             <Users width={18} height={18} style={styles.actionIcon} />
             <Text style={styles.attendingCount}>
-              {event.eventAttendees ? event.eventAttendees.length : 0} attending
+              {event.currentAttendees || 0}/{event.maxCapacity || 0} attending
             </Text>
+            {eventIsFull && (
+              <View style={styles.fullBadge}>
+                <Text style={styles.fullBadgeText}>FULL</Text>
+              </View>
+            )}
           </View>
           {userType === "student" ? (
             <TouchableOpacity
-              style={[
-                styles.rsvpButton,
-                isAttending && styles.rsvpButtonActive,
-              ]}
-              onPress={() => onRSVP(event.id)}
+              style={[rsvpButtonState.style]}
+              onPress={() => !rsvpButtonState.disabled && onRSVP(event.id)}
+              disabled={rsvpButtonState.disabled}
             >
-              <Text
-                style={[
-                  styles.rsvpButtonText,
-                  isAttending && styles.rsvpButtonTextActive,
-                ]}
-              >
-                {isAttending ? "Attending" : "RSVP"}
+              <Text style={[rsvpButtonState.textStyle]}>
+                {rsvpButtonState.text}
               </Text>
             </TouchableOpacity>
           ) : canEditEvent ? (
@@ -823,7 +876,7 @@ const Events = ({
           {userType === "organizer" && (
             <TouchableOpacity
               style={styles.createFirstEventButton}
-              onPress={() => navigation.navigate("AddEvent")}
+              onPress={() => navigation.navigate("AddEvent", {userData})}
             >
               <Plus width={20} height={20} color="#fff" />
               <Text style={styles.createFirstEventText}>Create Your First Event</Text>
@@ -855,6 +908,7 @@ const EventCard: React.FC<EventCardProps> = ({
   getEventTypeBadgeStyle,
 }) => {
   const badgeStyle = getEventTypeBadgeStyle(event.eventType);
+  const eventIsFull = (event.currentAttendees || 0) >= (event.maxCapacity || 0);
 
   return (
     <TouchableOpacity style={styles.cardContainer} onPress={onPress}>
@@ -880,11 +934,18 @@ const EventCard: React.FC<EventCardProps> = ({
               {event.eventType || "General"}
             </Text>
           </View>
-          {isAttending && (
-            <View style={styles.attendingBadge}>
-              <Text style={styles.attendingText}>Going</Text>
-            </View>
-          )}
+          <View style={styles.cardBadges}>
+            {isAttending && (
+              <View style={styles.attendingBadge}>
+                <Text style={styles.attendingText}>Going</Text>
+              </View>
+            )}
+            {eventIsFull && (
+              <View style={styles.fullBadge}>
+                <Text style={styles.fullBadgeText}>FULL</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <Text style={styles.cardTitle}>
@@ -920,7 +981,7 @@ const EventCard: React.FC<EventCardProps> = ({
         <View style={styles.cardDetailRow}>
           <Users width={14} height={14} style={styles.detailIcon} />
           <Text style={styles.cardDetailText}>
-            {event.eventAttendees ? event.eventAttendees.length : 0} attending
+            {event.currentAttendees || 0}/{event.maxCapacity || 0} attending
           </Text>
         </View>
       </View>
@@ -1071,6 +1132,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
+  cardBadges: {
+    flexDirection: "row",
+    gap: 8,
+  },
   eventTypeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1091,6 +1156,18 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 12,
     fontWeight: "500",
+  },
+  fullBadge: {
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 4,
+  },
+  fullBadgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
   },
   cardTitle: {
     fontSize: 18,
@@ -1197,12 +1274,19 @@ const styles = StyleSheet.create({
   rsvpButtonActive: {
     backgroundColor: "#22c55e",
   },
+  rsvpButtonDisabled: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#cbd5e1",
+  },
   rsvpButtonText: {
     color: "#22c55e",
     fontWeight: "500",
   },
   rsvpButtonTextActive: {
     color: "#fff",
+  },
+  rsvpButtonTextDisabled: {
+    color: "#94a3b8",
   },
   editButton: {
     flexDirection: "row",
