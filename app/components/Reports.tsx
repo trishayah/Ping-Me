@@ -89,7 +89,8 @@ const calculateMonthlyStats = (
 
 const Reports = ({ 
   userType = "organizer",
-  userData
+  userData,
+  userId // New prop to filter by specific organizer
 }: {
   userType?: "student" | "organizer";
   userData?: {
@@ -97,6 +98,7 @@ const Reports = ({
     email?: string;
     userType?: "student" | "organizer";
   };
+  userId?: string; // Optional userId prop to filter reports for specific organizer
 }) => {
   const [metrics, setMetrics] = useState<Metrics>({
     totalEvents: 0,
@@ -111,7 +113,8 @@ const Reports = ({
   useEffect(() => {
     console.log("=== REPORTS REAL-TIME SETUP ===");
     console.log("userType:", userType);
-    console.log("userId:", userData?.userId);
+    console.log("userId prop:", userId);
+    console.log("userData userId:", userData?.userId);
     console.log("email:", userData?.email);
 
     let eventsUnsubscribe: (() => void) | null = null;
@@ -121,14 +124,26 @@ const Reports = ({
       let eventsQuery;
       let registrationsQuery;
       
-      // Apply filtering based on user type (same as Events component)
-      if (userType === "organizer" && userData?.userId) {
-        console.log("Setting up reports for organizer events only");
+      // Determine which userId to use for filtering
+      const targetUserId = userId || userData?.userId;
+      
+      // Apply filtering based on user type and userId prop
+      if (userId) {
+        // If userId prop is provided, always filter by that specific organizer
+        console.log("Setting up reports for specific organizer:", userId);
+        eventsQuery = query(
+          collection(db, "events"),
+          where("createdBy", "==", userId)
+        );
+      } else if (userType === "organizer" && userData?.userId) {
+        // If no userId prop but user is organizer, filter by their own events
+        console.log("Setting up reports for current organizer events only");
         eventsQuery = query(
           collection(db, "events"),
           where("createdBy", "==", userData.userId)
         );
       } else {
+        // Show all events (for students or when no specific filtering is needed)
         console.log("Setting up reports for all events");
         eventsQuery = collection(db, "events");
       }
@@ -176,13 +191,13 @@ const Reports = ({
         }
 
         // For students, only show their own registrations
-        if (userType === "student" && userData?.email) {
+        if (userType === "student" && userData?.email && !userId) {
           registrationsQuery = query(
             collection(db, "registrations"),
             where("attendeeEmail", "==", userData.email)
           );
         } else {
-          // For organizers, show all registrations for their events
+          // For organizers or when filtering by userId, show all registrations for the filtered events
           registrationsQuery = collection(db, "registrations");
         }
 
@@ -253,7 +268,7 @@ const Reports = ({
       if (eventsUnsubscribe) eventsUnsubscribe();
       if (registrationsUnsubscribe) registrationsUnsubscribe();
     };
-  }, [userType, userData?.userId, userData?.email]);
+  }, [userType, userData?.userId, userData?.email, userId]); // Added userId to dependency array
 
   if (loading) {
     return (
@@ -263,18 +278,32 @@ const Reports = ({
     );
   }
 
+  // Determine title based on whether we're filtering by a specific userId
+  const getTitle = () => {
+    if (userId) {
+      return "Organizer Event Analytics";
+    }
+    return userType === "organizer" ? "My Event Analytics" : "Event Analytics";
+  };
+
+  // Determine metric labels based on filtering
+  const getMetricLabel = (baseLabel: string) => {
+    if (userId) {
+      return `Organizer ${baseLabel}`;
+    }
+    return userType === "organizer" ? `My ${baseLabel}` : `Total ${baseLabel}`;
+  };
+
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>
-        {userType === "organizer" ? "My Event Analytics" : "Event Analytics"}
-      </Text>
+      <Text style={styles.title}>{getTitle()}</Text>
 
       <View style={styles.metricsGrid}>
         <View style={styles.metricCard}>
           <Calendar width={24} height={24} style={styles.metricIcon} />
           <Text style={styles.metricNumber}>{metrics.totalEvents}</Text>
           <Text style={styles.metricLabel}>
-            {userType === "organizer" ? "My Events" : "Total Events"}
+            {getMetricLabel("Events")}
           </Text>
         </View>
 
@@ -282,7 +311,7 @@ const Reports = ({
           <Users width={24} height={24} style={styles.metricIcon} />
           <Text style={styles.metricNumber}>{metrics.totalAttendees}</Text>
           <Text style={styles.metricLabel}>
-            {userType === "organizer" ? "My Attendees" : "Total Attendees"}
+            {getMetricLabel("Attendees")}
           </Text>
         </View>
 
@@ -312,7 +341,7 @@ const Reports = ({
           ))
         ) : (
           <Text style={styles.emptyText}>
-            {userType === "organizer" 
+            {userId || userType === "organizer" 
               ? "No events created yet" 
               : "No categories data available"
             }
@@ -333,7 +362,7 @@ const Reports = ({
         ) : (
           <View style={styles.monthlyCard}>
             <Text style={styles.emptyText}>
-              {userType === "organizer" 
+              {userId || userType === "organizer" 
                 ? "No events data yet" 
                 : "No monthly data available"
               }

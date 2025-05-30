@@ -51,14 +51,16 @@ type EventData = {
   eventTime: string;
   eventAttendees?: any[];
   eventImage?: { uri: string } | null;
-  createdBy?: string; // Added to track who created the event
+  createdBy?: string;
+  isDeleted?: boolean; // Add soft delete flag
+  deletedAt?: string; // Add deletion timestamp
 };
 
 const Events = ({
   userType = "student",
   initialEvents = [],
   navigation,
-  userData, // <-- make sure this is passed from the parent
+  userData,
 }: {
   userType?: string;
   initialEvents?: any[];
@@ -66,10 +68,9 @@ const Events = ({
   userData?: { 
     email: string; 
     firstName: string; 
-    userId?: string; // Added userId to userData
+    userId?: string;
   };
 }) => {
-  // Debug log for userType
   console.log("Events component userType:", userType);
   console.log("Events component userData:", userData);
 
@@ -104,23 +105,30 @@ const Events = ({
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        console.log("Event data:", data); // Debug log
-        fetchedEvents.push({
-          id: doc.id,
-          eventName: data.name || "",
-          eventDescription: data.description || "",
-          eventType: data.category || "general", // Provide default value
-          eventLocation: data.location || "",
-          eventDate: data.date || "",
-          eventTime: data.time || "",
-          eventAttendees: data.attendees ? [data.attendees] : [],
-          eventImage: data.image ? { uri: data.image } : null,
-          createdBy: data.createdBy || "", // Include createdBy field
-        });
+        console.log("Event data:", data);
+        
+        // Filter out soft-deleted events for display
+        // But keep them in Firestore for transaction history
+        if (!data.isDeleted) {
+          fetchedEvents.push({
+            id: doc.id,
+            eventName: data.name || "",
+            eventDescription: data.description || "",
+            eventType: data.category || "general",
+            eventLocation: data.location || "",
+            eventDate: data.date || "",
+            eventTime: data.time || "",
+            eventAttendees: data.attendees ? [data.attendees] : [],
+            eventImage: data.image ? { uri: data.image } : null,
+            createdBy: data.createdBy || "",
+            isDeleted: data.isDeleted || false,
+            deletedAt: data.deletedAt || null,
+          });
+        }
       });
       
       setEvents(fetchedEvents);
-      console.log(`Fetched ${fetchedEvents.length} events for ${userType}`);
+      console.log(`Fetched ${fetchedEvents.length} active events for ${userType}`);
     } catch (error) {
       console.error("Error fetching events:", error);
       Alert.alert("Error", "Failed to fetch events. Please try again.");
@@ -174,8 +182,8 @@ const Events = ({
         await addDoc(collection(db, "registrations"), {
           eventId: event.id,
           eventName: event.eventName,
-          attendeeEmail: userEmail, // <-- store the student's email
-          attendeeName: userName, // <-- store the student's name
+          attendeeEmail: userEmail,
+          attendeeName: userName,
           registrationDate: new Date().toISOString(),
           status: "confirmed",
         });
@@ -238,7 +246,6 @@ const Events = ({
   }
 
   const getEventTypeBadgeStyle: GetEventTypeBadgeStyle = (type) => {
-    // Add null/undefined check
     if (!type) {
       return { backgroundColor: "#e2e8f0", color: "#334155" };
     }
@@ -267,7 +274,7 @@ const Events = ({
     userType,
     formatDate,
     getEventTypeBadgeStyle,
-    refreshEvents, // new prop
+    refreshEvents,
   }: {
     event: EventData;
     onBack: () => void;
@@ -278,7 +285,6 @@ const Events = ({
     getEventTypeBadgeStyle: (type: string) => { backgroundColor: string; color: string };
     refreshEvents?: () => void;
   }) => {
-    // Use the getEventTypeBadgeStyle function with null check
     const getEventTypeBadgeStyleSafe = (type: string) => {
       if (!type) {
         return { backgroundColor: "#e2e8f0", color: "#334155" };
@@ -338,10 +344,11 @@ const Events = ({
       setEditLoading(false);
     };
 
+    // Modified delete function to implement soft delete
     const handleDelete = async () => {
       Alert.alert(
         "Delete Event",
-        "Are you sure you want to delete this event?",
+        "Are you sure you want to delete this event? This will hide the event but preserve all registration records for historical purposes.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -350,10 +357,20 @@ const Events = ({
             onPress: async () => {
               setEditLoading(true);
               try {
-                await deleteDoc(doc(db, "events", event.id));
+                // Soft delete: mark as deleted instead of removing from database
+                const eventRef = doc(db, "events", event.id);
+                await updateDoc(eventRef, {
+                  isDeleted: true,
+                  deletedAt: new Date().toISOString(),
+                  deletedBy: userData?.userId, // Track who deleted it
+                });
+                
                 if (refreshEvents) refreshEvents();
                 onBack();
-                Alert.alert("Success", "Event deleted successfully!");
+                Alert.alert(
+                  "Success", 
+                  "Event deleted successfully! Registration records have been preserved for historical purposes."
+                );
               } catch (e) {
                 console.error("Failed to delete event:", e);
                 Alert.alert("Error", "Failed to delete event. Please try again.");

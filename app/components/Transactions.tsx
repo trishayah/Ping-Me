@@ -6,12 +6,14 @@ import {
   FlatList,
   TouchableOpacity,
 } from "react-native";
-import { Calendar, Users, User } from "react-native-feather";
+import { Calendar, Users, User, AlertTriangle } from "react-native-feather";
 import {
   collection,
   query,
   onSnapshot,
   where,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { firebaseApp, db } from "../../firebaseConfig";
 
@@ -31,6 +33,9 @@ type Event = {
   attendees: number; // max capacity
   registrations: Registration[];
   createdBy?: string; // Added to track event creator
+  isDeleted?: boolean; // Track if event is deleted
+  deletedAt?: string; // When it was deleted
+  deletedBy?: string; // Who deleted it
 };
 
 const Transactions = ({ 
@@ -59,15 +64,15 @@ const Transactions = ({
     const setupRealTimeListeners = () => {
       let eventsQuery;
       
-      // Apply filtering based on user type
+      // Apply filtering based on user type - but now include deleted events for transaction history
       if (userType === "organizer" && userData?.userId) {
-        console.log("Setting up real-time listener for organizer events");
+        console.log("Setting up real-time listener for organizer events (including deleted)");
         eventsQuery = query(
           collection(db, "events"),
           where("createdBy", "==", userData.userId)
         );
       } else {
-        console.log("Setting up real-time listener for all events");
+        console.log("Setting up real-time listener for all events (including deleted)");
         eventsQuery = collection(db, "events");
       }
 
@@ -91,7 +96,7 @@ const Transactions = ({
 
         eventsSnapshot.docs.forEach((docSnap) => {
           const eventData = docSnap.data();
-          console.log("Processing event:", docSnap.id, eventData.name || eventData.eventName);
+          console.log("Processing event:", docSnap.id, eventData.name || eventData.eventName, "Deleted:", eventData.isDeleted);
           
           let registrationsQuery;
           
@@ -142,6 +147,9 @@ const Transactions = ({
               attendees: eventData.attendees || 0,
               registrations,
               createdBy: eventData.createdBy || "",
+              isDeleted: eventData.isDeleted || false, // Include deletion status
+              deletedAt: eventData.deletedAt || null, // Include deletion timestamp
+              deletedBy: eventData.deletedBy || null, // Include who deleted it
             };
 
             // Update or add this event in the events array
@@ -183,6 +191,22 @@ const Transactions = ({
     };
   }, [userType, userData?.userId, userData?.email]);
 
+  // Helper function to format deletion date
+  const formatDeletionDate = (deletedAt: string) => {
+    try {
+      const date = new Date(deletedAt);
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "Unknown date";
+    }
+  };
+
   const renderEventOverview = ({ item }: { item: Event }) => {
     const totalRegistrations = item.registrations.length;
     const availableSpots = item.attendees - totalRegistrations;
@@ -192,29 +216,65 @@ const Transactions = ({
 
     return (
       <TouchableOpacity
-        style={styles.eventCard}
+        style={[
+          styles.eventCard,
+          item.isDeleted && styles.deletedEventCard, // Add special styling for deleted events
+        ]}
         onPress={() =>
           setSelectedEvent(selectedEvent === item.id ? null : item.id)
         }
       >
         <View style={styles.eventHeader}>
-          <Text style={styles.eventName}>{item.eventName}</Text>
+          <View style={styles.eventTitleContainer}>
+            <Text style={[
+              styles.eventName,
+              item.isDeleted && styles.deletedEventName
+            ]}>
+              {item.eventName}
+            </Text>
+            {item.isDeleted && (
+              <View style={styles.deletedBadge}>
+                <AlertTriangle width={12} height={12} style={styles.deletedIcon} />
+                <Text style={styles.deletedText}>DELETED</Text>
+              </View>
+            )}
+          </View>
           <View
             style={[
               styles.statusBadge,
-              { backgroundColor: availableSpots > 0 ? "#dcfce7" : "#fee2e2" },
+              { 
+                backgroundColor: item.isDeleted 
+                  ? "#fee2e2" 
+                  : availableSpots > 0 
+                    ? "#dcfce7" 
+                    : "#fee2e2" 
+              },
             ]}
           >
             <Text
               style={[
                 styles.statusText,
-                { color: availableSpots > 0 ? "#166534" : "#991b1b" },
+                { 
+                  color: item.isDeleted 
+                    ? "#991b1b" 
+                    : availableSpots > 0 
+                      ? "#166534" 
+                      : "#991b1b" 
+                },
               ]}
             >
-              {availableSpots > 0 ? "Open" : "Full"}
+              {item.isDeleted ? "Deleted" : availableSpots > 0 ? "Open" : "Full"}
             </Text>
           </View>
         </View>
+
+        {item.isDeleted && (
+          <View style={styles.deletionInfo}>
+            <Text style={styles.deletionText}>
+              Event deleted on {formatDeletionDate(item.deletedAt || "")}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.overviewStats}>
           <View style={styles.stat}>
@@ -226,7 +286,7 @@ const Transactions = ({
               }
             </Text>
           </View>
-          {userType === "organizer" && (
+          {userType === "organizer" && !item.isDeleted && (
             <View style={styles.stat}>
               <Text style={styles.statText}>
                 {availableSpots} spots remaining
@@ -275,6 +335,11 @@ const Transactions = ({
                           {registration.status}
                         </Text>
                       </View>
+                      {item.isDeleted && (
+                        <Text style={styles.historicalNote}>
+                          (Historical Record)
+                        </Text>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -375,17 +440,61 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  deletedEventCard: {
+    backgroundColor: "#fef9f9", // Light red background for deleted events
+    borderLeftWidth: 4,
+    borderLeftColor: "#dc2626", // Red left border
+  },
   eventHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 12,
+  },
+  eventTitleContainer: {
+    flex: 1,
+    marginRight: 12,
   },
   eventName: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1e293b",
-    flex: 1,
+    marginBottom: 4,
+  },
+  deletedEventName: {
+    color: "#64748b", // Muted color for deleted events
+    textDecorationLine: "line-through",
+  },
+  deletedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+  },
+  deletedIcon: {
+    color: "#dc2626",
+    marginRight: 4,
+  },
+  deletedText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#dc2626",
+  },
+  deletionInfo: {
+    backgroundColor: "#fef2f2",
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#f87171",
+  },
+  deletionText: {
+    fontSize: 12,
+    color: "#991b1b",
+    fontStyle: "italic",
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -474,6 +583,11 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 12,
     color: "#64748b",
+  },
+  historicalNote: {
+    fontSize: 10,
+    color: "#64748b",
+    fontStyle: "italic",
   },
 });
 
